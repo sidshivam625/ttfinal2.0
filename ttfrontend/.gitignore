@@ -1,0 +1,43 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Frontend-specific
+ttfrontend/node_modules/
+
+# Next.js / Build outputs
+.next/
+**/.next/
+**/lib/
+**/dist/
+**/out/
+
+# Logs
+logs
+*.log
+*.log.*
+Thumbs.db
+
+# Env
+.env
+.env.*
+**/.env.local
+
+# Firebase
+.firebase/
+.cache/
+firebase-debug.log
+firebase-debug.*.log
+
+# Editor
+.vscode/
+.idea/
+
+!backend/functions/src/data/delegates.csv
+backend/functions/lib/data/delegates.csv
+
