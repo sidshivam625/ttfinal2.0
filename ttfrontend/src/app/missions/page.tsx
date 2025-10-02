@@ -51,11 +51,9 @@ export default function MissionsPage() {
                 const token = await auth.currentUser?.getIdToken();
                 const base = (process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL || '').replace(/\/+$/, '');
                 const url = `${base}/missionsProgress`;
-                console.log('Fetching missionsProgress from', url);
                 const res = await fetch(url, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                console.log('missionsProgress response', res.status, await res.clone().text());
                 const data = await res.json();
                 if (data?.progress) {
                     const p = data.progress as Record<string, string>;
@@ -95,13 +93,11 @@ export default function MissionsPage() {
             const token = await auth.currentUser?.getIdToken();
             const base = (process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL || '').replace(/\/+$/, '');
             const url = `${base}/adminSubmitFlag`;
-            console.log('Submitting flag to', url);
             const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: uid, challengeId: challenge.challengeId || challenge.id, flag, token })
             });
-            console.log('adminSubmitFlag response', res.status, await res.clone().text());
             const data = await res.json();
             if (data.success) {
                 // Refresh progress after successful submission
