@@ -26,3 +26,18 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Background diamond pulse animation used by `src/utils/Background.tsx` */
+@keyframes diamondPulse {
+  0% {
+    transform: rotate(-45deg) scale(1);
+    background-color: rgba(239,59,87,0.06);
+    box-shadow: 0 0 6px rgba(239,59,87,0.04);
+  }
+  100% {
+    transform: rotate(-45deg) scale(1.08);
+    background-color: rgba(239,59,87,0.14);
+    box-shadow: 0 0 20px rgba(239,59,87,0.12);
+  }
+}
+
