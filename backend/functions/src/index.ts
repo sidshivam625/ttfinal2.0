@@ -441,11 +441,11 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
 
 // --- QR CODE GENERATION FUNCTIONS ---
 
-// QR Code generation using qrcode-generator and trapezoid SVG warp
+// QR Code generation using qrcode-generator with quadrant swap/rotate (no trapezoid warp)
 async function generateDistortedQRCode(flag: string): Promise<{ distortedQR: string; distortedQRType: 'svg' }> {
   try {
     const svgSize = 400;
-    const marginModules = 4;
+    const marginModules = 4; // quiet zone in modules
     const ecc = 'H';
 
     const qrcode = require('qrcode-generator');
@@ -457,36 +457,35 @@ async function generateDistortedQRCode(flag: string): Promise<{ distortedQR: str
     const totalModules = moduleCount + marginModules * 2;
     const moduleSize = svgSize / totalModules;
     const quietZonePx = marginModules * moduleSize;
+    const half = svgSize / 2;
 
-    const svgParts: string[] = [];
-    svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`);
-    svgParts.push(`<rect width="100%" height="100%" fill="#000"/>`);
-    svgParts.push(`
-      <defs>
-        <clipPath id="trapezoidWarp">
-          <polygon points="
-            ${svgSize * 0.2},0
-            ${svgSize * 0.8},0
-            ${svgSize},${svgSize}
-            0,${svgSize}
-          " />
-        </clipPath>
-      </defs>
-    `);
-    svgParts.push(`<g clip-path="url(#trapezoidWarp)">`);
+    // Buckets for quadrants: 1=TL, 2=TR, 3=BL, 4=BR
+    const q1: string[] = [];
+    const q2: string[] = [];
+    const q3: string[] = [];
+    const q4: string[] = [];
 
+    // Helper to classify by center point
+    const bucket = (el: string, cx: number, cy: number) => {
+      if (cx < half && cy < half) q1.push(el);
+      else if (cx >= half && cy < half) q2.push(el);
+      else if (cx < half && cy >= half) q3.push(el);
+      else q4.push(el);
+    };
+
+    // 1) Draw inverted modules (white on black), classified into quadrants
     for (let r = 0; r < moduleCount; r++) {
       for (let c = 0; c < moduleCount; c++) {
         if (qr.isDark(r, c)) {
           const x = quietZonePx + c * moduleSize;
           const y = quietZonePx + r * moduleSize;
-          svgParts.push(`<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="#fff" />`);
+          const el = `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="#fff" />`;
+          bucket(el, x + moduleSize / 2, y + moduleSize / 2);
         }
       }
     }
 
-    svgParts.push(`</g>`);
-
+    // 2) Remove finder patterns by covering with black rects, also bucketed
     const finderSizeModules = 7;
     const finderPx = finderSizeModules * moduleSize;
     const positions: Array<[number, number]> = [
@@ -494,18 +493,33 @@ async function generateDistortedQRCode(flag: string): Promise<{ distortedQR: str
       [moduleCount - finderSizeModules, 0],
       [0, moduleCount - finderSizeModules],
     ];
-    positions.forEach(([cx, cy]) => {
-      const px = quietZonePx + cx * moduleSize;
-      const py = quietZonePx + cy * moduleSize;
-      svgParts.push(`<rect x="${px}" y="${py}" width="${finderPx}" height="${finderPx}" fill="#000"/>`);
+    positions.forEach(([cxModules, cyModules]) => {
+      const px = quietZonePx + cxModules * moduleSize;
+      const py = quietZonePx + cyModules * moduleSize;
+      const el = `<rect x="${px}" y="${py}" width="${finderPx}" height="${finderPx}" fill="#000"/>`;
+      bucket(el, px + finderPx / 2, py + finderPx / 2);
     });
 
+    // 3) Light noise overlay, bucketed by center
     for (let i = 0; i < 15; i++) {
       const nx = Math.random() * svgSize;
       const ny = Math.random() * svgSize;
       const r = Math.random() * (moduleSize * 2);
-      svgParts.push(`<circle cx="${nx}" cy="${ny}" r="${r}" fill="rgba(255,255,255,0.08)"/>`);
+      const el = `<circle cx="${nx}" cy="${ny}" r="${r}" fill="rgba(255,255,255,0.08)"/>`;
+      bucket(el, nx, ny);
     }
+
+    // 4) Assemble final SVG with background black and quadrant groups
+    const svgParts: string[] = [];
+    svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`);
+    svgParts.push(`<rect width="100%" height="100%" fill="#000"/>`);
+
+    // Swap positions of 1 and 4 and rotate both 180° around center
+    // Q4 -> top-left rotated; Q2 -> top-right unchanged; Q3 -> bottom-left unchanged; Q1 -> bottom-right rotated
+    svgParts.push(`<g id="Q4_to_TL" transform="rotate(180, ${half}, ${half})">${q4.join('\n')}</g>`);
+    svgParts.push(`<g id="Q2_stay">${q2.join('\n')}</g>`);
+    svgParts.push(`<g id="Q3_stay">${q3.join('\n')}</g>`);
+    svgParts.push(`<g id="Q1_to_BR" transform="rotate(180, ${half}, ${half})">${q1.join('\n')}</g>`);
 
     svgParts.push(`</svg>`);
     const svg = svgParts.join('\n');
