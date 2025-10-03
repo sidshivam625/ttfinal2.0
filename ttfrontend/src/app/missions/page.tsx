@@ -162,6 +162,8 @@ export default function MissionsPage() {
                     }}
                 />
             </div>
-        </div>
+
+        </main>
+
     );
 }
