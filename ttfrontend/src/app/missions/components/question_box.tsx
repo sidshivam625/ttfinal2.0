@@ -12,6 +12,7 @@ export interface CTFCardProps {
   chips?: { label: string; color: string; border: string; bg: string }[];
   briefingLabel?: string;
   statuses?: { label: string; dot: string; text: string }[];
+  points?: number;
 }
 
 export default function CTFCard({
@@ -23,6 +24,7 @@ export default function CTFCard({
   lineHeightPx = 0.5,
   lineOpacity = 0.6,
   showLines = true,
+  points,
   chips = [],
   briefingLabel = "Briefing",
   statuses = [],
@@ -60,6 +62,8 @@ export default function CTFCard({
         <div className="flex items-center gap-4">
           <span className="font-vt323 text-sm leading-5 tracking-[0.7px] text-[#99A1AF]">
             TARGET.ID #01
+
+            Points : {points || 0}
           </span>
           <div className="flex-1 flex items-center gap-3">
             <div

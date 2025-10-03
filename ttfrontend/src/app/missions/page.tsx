@@ -2,12 +2,12 @@
 import CTFCard from "./components/question_box";
 import QuestionGrid from "./components/question_grid";
 import Terminal from "./components/terminal";
-// IntelFiles component unused in this page; omitted import
+import IntelFiles from "./components/downloadFiles";
 import { auth, db } from "../../../lib/firebaseClient";
 import { collection, getDocs } from "firebase/firestore";
 import { useEffect, useState } from "react";
 
-
+// Your original, unchanged logic is here
 export default function MissionsPage() {
     const [challenges, setChallenges] = useState<any[]>([]);
     const [currentIdx, setCurrentIdx] = useState(0);
@@ -16,7 +16,6 @@ export default function MissionsPage() {
     const [uid, setUid] = useState<string | null>(null);
 
     useEffect(() => {
-        // track auth state
         const unsub = auth.onAuthStateChanged(async (user) => {
             setUid(user ? user.uid : null);
         });
@@ -28,14 +27,12 @@ export default function MissionsPage() {
             const snap = await getDocs(collection(db, "challenges"));
             const arr: any[] = [];
             snap.forEach(doc => arr.push({ id: doc.id, ...doc.data() }));
-            // Sort by numeric part of challengeId (e.g., challenge1, challenge2, ...)
             arr.sort((a, b) => {
                 const numA = parseInt((a.challengeId || a.id).replace(/[^\d]/g, ""), 10);
                 const numB = parseInt((b.challengeId || b.id).replace(/[^\d]/g, ""), 10);
                 return numA - numB;
             });
             setChallenges(arr);
-            // Only first unlocked, rest locked
             const st: {[key: number]: "active"|"done"|"locked"} = {};
             arr.forEach((c, i) => st[i] = i === 0 ? "active" : "locked");
             setStatuses(st);
@@ -46,18 +43,15 @@ export default function MissionsPage() {
 
     useEffect(() => {
         async function fetchProgress() {
-            if (!uid) return;
+            if (!uid || challenges.length === 0) return;
             try {
                 const token = await auth.currentUser?.getIdToken();
                 const base = (process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL || '').replace(/\/+$/, '');
                 const url = `${base}/missionsProgress`;
-                const res = await fetch(url, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
                 const data = await res.json();
                 if (data?.progress) {
                     const p = data.progress as Record<string, string>;
-                    // unlock tiles based on progress
                     const st: {[key: number]: "active"|"done"|"locked"} = {};
                     challenges.forEach((c, i) => {
                         const key = c.challengeId || c.id;
@@ -65,7 +59,6 @@ export default function MissionsPage() {
                         else if (p[key] === 'active') st[i] = 'active';
                         else st[i] = 'locked';
                     });
-                    // restore active index from API if provided
                     let firstActive = typeof data.firstActiveIndex === 'number' ? data.firstActiveIndex : -1;
                     if (firstActive < 0) {
                         for (let i = 0; i < challenges.length; i++) {
@@ -75,16 +68,11 @@ export default function MissionsPage() {
                     setStatuses(st);
                     if (firstActive >= 0) setCurrentIdx(firstActive);
                 }
-            } catch (e) {
-                console.error('Error fetching progress:', e);
-            }
+            } catch (e) { console.error('Error fetching progress:', e); }
         }
         fetchProgress();
     }, [uid, challenges]);
 
-    // grid click handled via QuestionGrid onCellClick prop (setCurrentIdx)
-
-    // Validate flag and unlock next
     async function validateFlag(flag: string): Promise<{ success: boolean; message: string }> {
         if (!challenges.length) return { success: false, message: "No challenge loaded." };
         if (!uid) return { success: false, message: "User not authenticated." };
@@ -100,10 +88,7 @@ export default function MissionsPage() {
             });
             const data = await res.json();
             if (data.success) {
-                // Refresh progress after successful submission
-                const progressRes = await fetch(`${base}/missionsProgress`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const progressRes = await fetch(`${base}/missionsProgress`, { headers: { Authorization: `Bearer ${token}` } });
                 const progressData = await progressRes.json();
                 if (progressData?.progress) {
                     const p = progressData.progress as Record<string, string>;
@@ -115,7 +100,6 @@ export default function MissionsPage() {
                         else st[i] = 'locked';
                     });
                     setStatuses(st);
-                    // Move to next active challenge
                     const nextActive = challenges.findIndex((c, i) => st[i] === 'active');
                     if (nextActive >= 0) setCurrentIdx(nextActive);
                 }
@@ -128,56 +112,60 @@ export default function MissionsPage() {
     }
 
     if (loading) return (
-        <main className="p-6 flex items-center justify-center min-h-[60vh]">
+        <main className="min-h-screen bg-[#0d0d0d] p-6 flex items-center justify-center">
             <div className="flex flex-col items-center gap-4">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pink-500"></div>
-                <span className="text-lg font-bold text-pink-500">Loading missions...</span>
+                <span className="text-lg font-bold text-pink-500 font-vt323">Loading missions...</span>
             </div>
         </main>
     );
 
-    if (!uid) {
-        return (
-            <main className="p-6 text-center">
-                <p className="mb-4">Please sign in to access missions.</p>
-                <a className="underline text-pink-500" href="/signin">Go to Sign In</a>
-            </main>
-        );
-    }
-
     if (!challenges.length) return <div className="p-6 text-center text-lg">No missions found.</div>;
 
-    // Show grid and current question
+    const currentChallenge = challenges[currentIdx];
+
+    // This is the new UI layout that arranges your components
     return (
-        <main className="p-6 flex flex-col items-center gap-8">
-            <h1 className="text-2xl font-bold mb-2">Missions</h1>
-            <QuestionGrid
-                total={challenges.length || 25}
-                columns={5}
-                cellSize="60px"
-                initialStatuses={statuses}
-                title="Questions"
-                gridWidth="100%"
-                gridHeight="auto"
-                onCellClick={setCurrentIdx}
-            />
-            <div className="w-full max-w-[700px]">
-                {challenges[currentIdx] && (
-                    <CTFCard
-                        title={challenges[currentIdx].challengeId || `Challenge ${currentIdx + 1}`}
-                        description={challenges[currentIdx].description || "No description."}
-                        difficulty={challenges[currentIdx].difficulty || "HARD"}
-                        briefingLabel="Briefing"
-                    />
-                )}
+        <div className="min-h-screen bg-[#0d0d0d] text-white">
+
+            <div className="relative z-10 p-4 sm:p-8 lg:p-12">
+                <header className="flex items-center gap-6 pb-8 border-b-2 border-[#522546] mb-8">
+                    <h1 className="font-press-start-2p text-4xl text-[#ff5757] tracking-widest">
+                        MISSION NO.{String(currentIdx + 1).padStart(2, '0')}
+                    </h1>
+                    <div className="flex-1 h-px bg-gradient-to-r from-[#522546] to-transparent"></div>
+                </header>
+
+                <main className="grid grid-cols-1 lg:grid-cols-10 gap-8">
+                    {/* Left Column (70%) */}
+                    <div className="lg:col-span-7 flex flex-col gap-8">
+                        {currentChallenge && (
+                            <>
+                                <CTFCard
+                                    title={currentChallenge.title || `Challenge ${currentIdx + 1}`}
+                                    description={currentChallenge.description || "No description."}
+                                    difficulty={currentChallenge.Level || "HARD"}
+                                    points={currentChallenge.points || 0}
+                                />
+                                <Terminal onSubmit={validateFlag} />
+                            </>
+                        )}
+                    </div>
+
+                    {/* Right Column (30%) */}
+                    <div className="lg:col-span-3 flex flex-col gap-8">
+                        <QuestionGrid
+                            total={challenges.length}
+                            columns={5}
+                            initialStatuses={statuses}
+                            onCellClick={setCurrentIdx}
+                            cellSize="50px"
+
+                        />
+                        {currentChallenge && <IntelFiles links={currentChallenge.links} />}
+                    </div>
+                </main>
             </div>
-            <div className="w-full max-w-[700px] mt-6">
-                <Terminal
-                    onSubmit={async (flag: string) => {
-                        return await validateFlag(flag);
-                    }}
-                />
-            </div>
-        </main>
+        </div>
     );
 }

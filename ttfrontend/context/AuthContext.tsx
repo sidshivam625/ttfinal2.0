@@ -26,7 +26,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider value={{ user, loading }}>
-      {loading ? <div className="min-h-screen bg-gray-900 flex items-center justify-center"><Loader2 size={48} className="animate-spin text-pink-500"/></div> : children}
+      {loading ? <div className="min-h-screen flex items-center justify-center"><Loader2 size={48} className="animate-spin text-[#7A2F49]"/></div> : children}
     </AuthContext.Provider>
   );
 };
