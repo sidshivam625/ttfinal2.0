@@ -2,7 +2,8 @@
 import CTFCard from "./components/question_box";
 import QuestionGrid from "./components/question_grid";
 import Terminal from "./components/terminal";
-import IntelFiles from "./components/downloadFiles";
+import QRPuzzle from "./components/qr_puzzle"; // NEW IMPORT
+// IntelFiles component unused in this page; omitted import
 import { auth, db } from "../../../lib/firebaseClient";
 import { collection, getDocs } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -126,45 +127,40 @@ export default function MissionsPage() {
 
     // This is the new UI layout that arranges your components
     return (
-        <div className="min-h-screen bg-[#0d0d0d] text-white">
-
-            <div className="relative z-10 p-4 sm:p-8 lg:p-12">
-                <header className="flex items-center gap-6 pb-8 border-b-2 border-[#522546] mb-8">
-                    <h1 className="font-press-start-2p text-4xl text-[#ff5757] tracking-widest">
-                        MISSION NO.{String(currentIdx + 1).padStart(2, '0')}
-                    </h1>
-                    <div className="flex-1 h-px bg-gradient-to-r from-[#522546] to-transparent"></div>
-                </header>
-
-                <main className="grid grid-cols-1 lg:grid-cols-10 gap-8">
-                    {/* Left Column (70%) */}
-                    <div className="lg:col-span-7 flex flex-col gap-8">
-                        {currentChallenge && (
-                            <>
-                                <CTFCard
-                                    title={currentChallenge.title || `Challenge ${currentIdx + 1}`}
-                                    description={currentChallenge.description || "No description."}
-                                    difficulty={currentChallenge.Level || "HARD"}
-                                    points={currentChallenge.points || 0}
-                                />
-                                <Terminal onSubmit={validateFlag} />
-                            </>
-                        )}
-                    </div>
-
-                    {/* Right Column (30%) */}
-                    <div className="lg:col-span-3 flex flex-col gap-8">
-                        <QuestionGrid
-                            total={challenges.length}
-                            columns={5}
-                            initialStatuses={statuses}
-                            onCellClick={setCurrentIdx}
-                            cellSize="50px"
-
-                        />
-                        {currentChallenge && <IntelFiles links={currentChallenge.links} />}
-                    </div>
-                </main>
+        <main className="p-6 flex flex-col items-center gap-8">
+            <h1 className="text-2xl font-bold mb-2">Missions</h1>
+            <QuestionGrid
+                total={challenges.length || 25}
+                columns={5}
+                cellSize="60px"
+                initialStatuses={statuses}
+                title="Questions"
+                gridWidth="100%"
+                gridHeight="auto"
+                onCellClick={setCurrentIdx}
+            />
+            <div className="w-full max-w-[700px]">
+                {challenges[currentIdx] && (
+                    <CTFCard
+                        title={challenges[currentIdx].challengeId || `Challenge ${currentIdx + 1}`}
+                        description={challenges[currentIdx].description || "No description."}
+                        difficulty={challenges[currentIdx].difficulty || "HARD"}
+                        briefingLabel="Briefing"
+                        customContent={
+                            // NEW: Show QR puzzle for custom challenges
+                            challenges[currentIdx].isCustom ? (
+                                <QRPuzzle challengeId={challenges[currentIdx].challengeId || challenges[currentIdx].id} />
+                            ) : null
+                        }
+                    />
+                )}
+            </div>
+            <div className="w-full max-w-[700px] mt-6">
+                <Terminal
+                    onSubmit={async (flag: string) => {
+                        return await validateFlag(flag);
+                    }}
+                />
             </div>
         </div>
     );

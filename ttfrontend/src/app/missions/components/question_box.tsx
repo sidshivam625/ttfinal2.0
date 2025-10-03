@@ -12,6 +12,7 @@ export interface CTFCardProps {
   chips?: { label: string; color: string; border: string; bg: string }[];
   briefingLabel?: string;
   statuses?: { label: string; dot: string; text: string }[];
+  customContent?: React.ReactNode; // NEW: Allow custom content
   points?: number;
 }
 
@@ -28,6 +29,7 @@ export default function CTFCard({
   chips = [],
   briefingLabel = "Briefing",
   statuses = [],
+  customContent, // NEW
 }: CTFCardProps) {
   return (
     <section
@@ -111,6 +113,13 @@ export default function CTFCard({
           {description}
         </p>
       </div>
+
+      {/* NEW: Custom content section */}
+      {customContent && (
+        <div className="mt-4">
+          {customContent}
+        </div>
+      )}
 
       {/* Accent line 2 */}
       {showLines && (
