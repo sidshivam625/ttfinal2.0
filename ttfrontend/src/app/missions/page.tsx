@@ -2,6 +2,7 @@
 import CTFCard from "./components/question_box";
 import QuestionGrid from "./components/question_grid";
 import Terminal from "./components/terminal";
+import QRPuzzle from "./components/qr_puzzle"; // NEW IMPORT
 // IntelFiles component unused in this page; omitted import
 import { auth, db } from "../../../lib/firebaseClient";
 import { collection, getDocs } from "firebase/firestore";
@@ -168,6 +169,12 @@ export default function MissionsPage() {
                         description={challenges[currentIdx].description || "No description."}
                         difficulty={challenges[currentIdx].difficulty || "HARD"}
                         briefingLabel="Briefing"
+                        customContent={
+                            // NEW: Show QR puzzle for custom challenges
+                            challenges[currentIdx].isCustom ? (
+                                <QRPuzzle challengeId={challenges[currentIdx].challengeId || challenges[currentIdx].id} />
+                            ) : null
+                        }
                     />
                 )}
             </div>

@@ -1,11 +1,38 @@
-import * as functions from "firebase-functions";
+import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import * as fs from "fs";
 import * as path from "path";
 import csv from "csv-parser";
 import corsLib from 'cors';
+// QRCode import removed - now using qrcode-generator in separate file
 
 const cors = corsLib({ origin: true });
+
+// Admin endpoint to (re)generate custom flags for a given user (for debugging/backfill)
+export const triggerCustomFlags = functions.region('asia-south1').https.onRequest(async (req, res) => {
+  cors(req, res, async () => {
+    try {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+      const app = initAdmin()
+
+      const authHeader = req.headers.authorization || ''
+      const idToken = authHeader.replace('Bearer ', '')
+      if (!idToken) return res.status(401).json({ error: 'Missing token' })
+      const decoded = await app.auth().verifyIdToken(idToken)
+      const callerUid = (decoded as any).uid
+
+      const { userId, delegateId } = req.body || {}
+      if (!userId || !delegateId) return res.status(400).json({ error: 'Missing userId or delegateId' })
+
+      console.log('[triggerCustomFlags] Triggered by', { callerUid, targetUser: userId })
+      await createCustomFlagsForUser(userId, delegateId)
+      return res.status(200).json({ success: true })
+    } catch (e: any) {
+      console.error('[triggerCustomFlags] Error', e)
+      return res.status(500).json({ success: false, error: e?.message || String(e) })
+    }
+  })
+})
 
 function initAdmin(): admin.app.App {
   if (admin.apps.length > 0) return admin.app();
@@ -151,6 +178,12 @@ export const createAccount = functions.region('asia-south1').https.onCall(async 
       createdAt: admin.firestore.FieldValue.serverTimestamp(), // Add creation timestamp
       optionalField: "", // Add optional field from schema
     });
+
+    // Create custom flags for challenges with isCustom = true
+    console.log('[createAccount] Starting custom flag generation', { uid: userRecord.uid, delegateId });
+    await createCustomFlagsForUser(userRecord.uid, delegateId);
+    console.log('[createAccount] Finished custom flag generation', { uid: userRecord.uid });
+
     return {success: true, uid: userRecord.uid};
   } catch (error: any) {
     if (error.code === "auth/email-already-exists") {
@@ -283,38 +316,65 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
         }
       }
 
-      // Find flag doc
-      const candidates: string[] = Array.from(new Set([
-        String(challengeId),
-        String(challengeId).trim(),
-        String(challengeId).replace(/\s+/g, ''),
-        String(challengeId).toLowerCase(),
-        String(challengeId).toLowerCase().replace(/\s+/g, ''),
-      ]))
-      let flagDoc: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData> | null = null
-      let matchedId: string | null = null
-      for (const cid of candidates) {
-        const d = await db.collection('flags').doc(cid).get()
-        if (d.exists) { flagDoc = d; matchedId = cid; break }
-      }
-      if (!flagDoc || !flagDoc.exists) return res.status(404).json({ success: false, message: 'Flag not found.' })
-
-      const flagData = flagDoc.data() as any
+      // Check if this is a custom challenge first
+      const challengeRef = db.collection('challenges').doc(challengeId)
+      const challengeSnap = await challengeRef.get()
+      const challengeData = challengeSnap.exists ? challengeSnap.data() : {}
+      
       const submitted = String(flag ?? '').trim()
       let isCorrect = false
-      const storedHash = flagData?.flagHash || flagData?.hash
-      const storedPlain = flagData?.flag
-      if (storedHash) {
-        const crypto = await import('crypto')
-        if (String(storedHash).startsWith('$argon2')) {
-          const argon2 = await import('argon2')
-          try { isCorrect = await argon2.default.verify(String(storedHash), submitted) } catch { isCorrect = false }
+      
+      if (challengeData?.isCustom && uid) {
+        // Handle custom flag validation
+        const collectionName = `customFlagChallenge${challengeId.replace('challenge', '')}`;
+        const customFlagsSnap = await db.collection(collectionName)
+          .where('userId', '==', uid)
+          .where('challengeId', '==', challengeId)
+          .limit(1)
+          .get()
+        
+        if (!customFlagsSnap.empty) {
+          const customFlagData = customFlagsSnap.docs[0].data()
+          isCorrect = submitted === customFlagData.flagData.originalFlag
+          
+          if (isCorrect) {
+            // Mark custom flag as used
+            await customFlagsSnap.docs[0].ref.update({ isUsed: true })
+          }
         } else {
-          const submittedHash = crypto.createHash('sha256').update(submitted).digest('hex')
-          isCorrect = submittedHash === String(storedHash).trim().toLowerCase()
+          return res.status(404).json({ success: false, message: 'Custom flag not found for this user.' })
         }
-      } else if (storedPlain) {
-        isCorrect = submitted === String(storedPlain).trim()
+      } else {
+        // Handle regular flag validation
+        const candidates: string[] = Array.from(new Set([
+          String(challengeId),
+          String(challengeId).trim(),
+          String(challengeId).replace(/\s+/g, ''),
+          String(challengeId).toLowerCase(),
+          String(challengeId).toLowerCase().replace(/\s+/g, ''),
+        ]))
+        let flagDoc: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData> | null = null
+        for (const cid of candidates) {
+          const d = await db.collection('flags').doc(cid).get()
+          if (d.exists) { flagDoc = d; break }
+        }
+        if (!flagDoc || !flagDoc.exists) return res.status(404).json({ success: false, message: 'Flag not found.' })
+
+        const flagData = flagDoc.data() as any
+        const storedHash = flagData?.flagHash || flagData?.hash
+        const storedPlain = flagData?.flag
+        if (storedHash) {
+          const crypto = await import('crypto')
+          if (String(storedHash).startsWith('$argon2')) {
+            const argon2 = await import('argon2')
+            try { isCorrect = await argon2.default.verify(String(storedHash), submitted) } catch { isCorrect = false }
+          } else {
+            const submittedHash = crypto.createHash('sha256').update(submitted).digest('hex')
+            isCorrect = submittedHash === String(storedHash).trim().toLowerCase()
+          }
+        } else if (storedPlain) {
+          isCorrect = submitted === String(storedPlain).trim()
+        }
       }
 
       if (isCorrect) {
@@ -324,7 +384,7 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
             const snap = await tx.get(userRef)
             const data = (snap.exists ? snap.data() : {}) as any
             const logs: any[] = Array.isArray(data?.solved_logs) ? data.solved_logs : []
-            const cid = matchedId || challengeId
+            const cid = challengeId
             const index = logs.findIndex((e) => (e?.challengeId || '').toLowerCase().replace(/\s+/g,'') === String(cid).toLowerCase().replace(/\s+/g,''))
             const nowIso = new Date().toISOString()
             if (index >= 0) {
@@ -359,7 +419,7 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
           const snap = await tx.get(userRef)
           const data = (snap.exists ? snap.data() : {}) as any
           const logs: any[] = Array.isArray(data?.solved_logs) ? data.solved_logs : []
-          const cid = matchedId || challengeId
+          const cid = challengeId
           const index = logs.findIndex((e) => (e?.challengeId || '').toLowerCase().replace(/\s+/g,'') === String(cid).toLowerCase().replace(/\s+/g,''))
           if (index >= 0) {
             const entry = { ...logs[index] }
@@ -378,4 +438,196 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
     }
   })
 })
+
+// --- QR CODE GENERATION FUNCTIONS ---
+
+// QR Code generation using qrcode-generator and trapezoid SVG warp
+async function generateDistortedQRCode(flag: string): Promise<{ distortedQR: string; distortedQRType: 'svg' }> {
+  try {
+    const svgSize = 400;
+    const marginModules = 4;
+    const ecc = 'H';
+
+    const qrcode = require('qrcode-generator');
+    const qr = qrcode(0, ecc);
+    qr.addData(flag);
+    qr.make();
+    const moduleCount = qr.getModuleCount();
+
+    const totalModules = moduleCount + marginModules * 2;
+    const moduleSize = svgSize / totalModules;
+    const quietZonePx = marginModules * moduleSize;
+
+    const svgParts: string[] = [];
+    svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`);
+    svgParts.push(`<rect width="100%" height="100%" fill="#000"/>`);
+    svgParts.push(`
+      <defs>
+        <clipPath id="trapezoidWarp">
+          <polygon points="
+            ${svgSize * 0.2},0
+            ${svgSize * 0.8},0
+            ${svgSize},${svgSize}
+            0,${svgSize}
+          " />
+        </clipPath>
+      </defs>
+    `);
+    svgParts.push(`<g clip-path="url(#trapezoidWarp)">`);
+
+    for (let r = 0; r < moduleCount; r++) {
+      for (let c = 0; c < moduleCount; c++) {
+        if (qr.isDark(r, c)) {
+          const x = quietZonePx + c * moduleSize;
+          const y = quietZonePx + r * moduleSize;
+          svgParts.push(`<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="#fff" />`);
+        }
+      }
+    }
+
+    svgParts.push(`</g>`);
+
+    const finderSizeModules = 7;
+    const finderPx = finderSizeModules * moduleSize;
+    const positions: Array<[number, number]> = [
+      [0, 0],
+      [moduleCount - finderSizeModules, 0],
+      [0, moduleCount - finderSizeModules],
+    ];
+    positions.forEach(([cx, cy]) => {
+      const px = quietZonePx + cx * moduleSize;
+      const py = quietZonePx + cy * moduleSize;
+      svgParts.push(`<rect x="${px}" y="${py}" width="${finderPx}" height="${finderPx}" fill="#000"/>`);
+    });
+
+    for (let i = 0; i < 15; i++) {
+      const nx = Math.random() * svgSize;
+      const ny = Math.random() * svgSize;
+      const r = Math.random() * (moduleSize * 2);
+      svgParts.push(`<circle cx="${nx}" cy="${ny}" r="${r}" fill="rgba(255,255,255,0.08)"/>`);
+    }
+
+    svgParts.push(`</svg>`);
+    const svg = svgParts.join('\n');
+    const base64 = Buffer.from(svg).toString('base64');
+    return { distortedQR: base64, distortedQRType: 'svg' };
+  } catch (error) {
+    console.error('Error generating QR code:', error);
+    throw new functions.https.HttpsError('internal', 'QR code generation failed');
+  }
+}
+
+// Generate custom flag for user-challenge combination
+function generateCustomFlag(userId: string, challengeId: string): string {
+  const crypto = require('crypto');
+  const seed = `${userId}_${challengeId}_qr_puzzle`;
+  const hash = crypto.createHash('sha256').update(seed).digest('hex');
+  
+  // Take first 12 characters for a shorter flag
+  const flagContent = hash.substring(0, 12);
+  return `ctf{${flagContent}}`;
+}
+
+// Encrypt flag for storage
+function encryptFlag(flag: string): string {
+  const crypto = require('crypto');
+  const key = process.env.ENCRYPTION_KEY || 'default-key-change-in-production';
+  const cipher = crypto.createCipher('aes192', key);
+  let encrypted = cipher.update(flag, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return encrypted;
+}
+
+// Create custom flags for a user
+async function createCustomFlagsForUser(userId: string, delegateId: string) {
+  try {
+    console.log('[createCustomFlagsForUser] Fetching isCustom challenges for user', { userId, delegateId });
+    // Get all challenges with isCustom = true
+    const challengesSnap = await db.collection('challenges')
+      .where('isCustom', '==', true)
+      .get();
+    console.log('[createCustomFlagsForUser] Challenges found', { count: challengesSnap.size });
+    
+    const customFlagPromises: Promise<any>[] = [];
+    
+    for (const doc of challengesSnap.docs) {
+      const challengeData = doc.data();
+      const challengeId = challengeData.challengeId || doc.id;
+      console.log('[createCustomFlagsForUser] Processing challenge', { challengeId, docId: doc.id });
+      
+      // Generate a unique custom flag for this user-challenge combination
+      const customFlag = generateCustomFlag(userId, challengeId);
+      
+      // Generate distorted QR code
+      const qrData = await generateDistortedQRCode(customFlag);
+      
+      // Create custom flag document
+      const customFlagDoc = {
+        userId: userId,
+        delegateId: delegateId,
+        challengeId: challengeId,
+        flagData: {
+          originalFlag: customFlag,
+          encryptedFlag: encryptFlag(customFlag),
+          qrImages: qrData
+        },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        isUsed: false
+      };
+      
+      // Use separate collections for different challenges
+      const collectionName = `customFlagChallenge${challengeId.replace('challenge', '')}`;
+      console.log('[createCustomFlagsForUser] Writing custom flag doc', { collectionName, userId, challengeId });
+      customFlagPromises.push(
+        db.collection(collectionName).add(customFlagDoc)
+      );
+    }
+    
+    await Promise.all(customFlagPromises);
+    console.log('[createCustomFlagsForUser] Created custom flags', { created: customFlagPromises.length, userId });
+  } catch (error) {
+    console.error('[createCustomFlagsForUser] Error creating custom flags:', error);
+    // Don't throw error to prevent account creation failure
+  }
+}
+
+// Get user's custom QR codes
+export const getUserQRCodes = functions.region('asia-south1').https.onCall(async (data: {challengeId: string}, context: functions.https.CallableContext) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const uid = context.auth.uid;
+  const {challengeId} = data;
+
+  if (!challengeId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Challenge ID is required');
+  }
+
+  try {
+    console.log('[getUserQRCodes] Fetching QR for user', { uid, challengeId });
+    const collectionName = `customFlagChallenge${challengeId.replace('challenge', '')}`;
+    const customFlagsSnap = await db.collection(collectionName)
+      .where('userId', '==', uid)
+      .where('challengeId', '==', challengeId)
+      .limit(1)
+      .get();
+
+    if (customFlagsSnap.empty) {
+      throw new functions.https.HttpsError('not-found', 'No custom flag found for this challenge');
+    }
+
+    const customFlagData = customFlagsSnap.docs[0].data();
+    console.log('[getUserQRCodes] Found custom flag doc', { docId: customFlagsSnap.docs[0].id, collectionName });
+    
+    return {
+      distortedQR: customFlagData.flagData.qrImages.distortedQR,
+      type: customFlagData.flagData.qrImages.distortedQRType || 'svg',
+      challengeId: challengeId
+    };
+  } catch (error) {
+    console.error('Error fetching QR codes:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to fetch QR codes');
+  }
+});
 
