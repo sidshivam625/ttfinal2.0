@@ -645,3 +645,91 @@ export const getUserQRCodes = functions.region('asia-south1').https.onCall(async
   }
 });
 
+
+export const leaderboard = functions.region("asia-south1").https.onCall(async (data, context) => {
+  // No auth check needed for a public leaderboard
+  const limit = 50; // Or get from `data` if you want to pass it from client
+
+  const usersSnap = await db.collection('users')
+    .orderBy('totalScore', 'desc')
+    .limit(limit)
+    .get();
+
+  const results: Array<{ uid: string; username: string; totalScore: number; solvedCount: number; delegateId?: string }>= [];
+  usersSnap.forEach((doc) => {
+    const d = doc.data() as any;
+    const username = d.username || d.name || 'Anonymous';
+    const totalScore = Number(d.totalScore ?? 0);
+    const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
+    const solvedCount = solvedLogs.filter((e) => Number(e?.actualScore || 0) > 0).length;
+    results.push({ uid: doc.id, username, totalScore, solvedCount, delegateId: d.delegateId });
+  });
+
+  const withRank = results.map((r, idx) => ({ rank: idx + 1, ...r }));
+  return { success: true, leaderboard: withRank };
+});
+
+export const getLeaderboardWithHistory = functions.region("asia-south1").https.onCall(async (data, context) => {
+    const limit = 10; // We only need the top 10 for the chart
+
+    // This query is efficient: it only fetches the top 10 users by score.
+    const usersSnap = await db.collection('users')
+        .orderBy('totalScore', 'desc')
+        .limit(limit)
+        .get();
+
+    const results: Array<{
+        rank: number;
+        uid: string;
+        username: string;
+        totalScore: number;
+        // The `time` property will now be a real timestamp in milliseconds
+        pointsOverTime: { time: number; score: number }[];
+    }> = [];
+
+    let rank = 1;
+    for (const doc of usersSnap.docs) {
+        const d = doc.data() as any;
+        const username = d.username || d.name || 'Anonymous';
+        const totalScore = Number(d.totalScore ?? 0);
+        const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
+        
+        // Get the user's creation time as the "time zero" for their graph
+        const startTime = d.createdAt?.toMillis() || Date.now();
+
+        const pointsOverTime: { time: number; score: number }[] = [];
+        let cumulativeScore = 0;
+
+        // Add a starting point in time for the chart
+        pointsOverTime.push({ time: startTime, score: 0 });
+
+        // Filter for solved challenges and sort them by when they were solved
+        const sortedSolved = solvedLogs
+            .filter((e) => e?.solvedAt && String(e.solvedAt).length > 0 && Number(e?.actualScore || 0) > 0)
+            .sort((a, b) => new Date(a.solvedAt).getTime() - new Date(b.solvedAt).getTime());
+
+        // Create a time-series of score accumulation
+        sortedSolved.forEach((log) => {
+            cumulativeScore += Number(log.actualScore || 0);
+            const solveTime = new Date(log.solvedAt).getTime();
+            
+            // Only add point if time has passed, to avoid vertical lines on chart
+            if (solveTime > pointsOverTime[pointsOverTime.length - 1].time) {
+                 pointsOverTime.push({ time: solveTime, score: cumulativeScore });
+            } else {
+                // If two solves happened at the exact same millisecond, just update the score
+                pointsOverTime[pointsOverTime.length - 1].score = cumulativeScore;
+            }
+        });
+
+        results.push({
+            rank: rank++,
+            uid: doc.id,
+            username,
+            totalScore,
+            pointsOverTime,
+        });
+    }
+
+    return { success: true, leaderboard: results };
+});
