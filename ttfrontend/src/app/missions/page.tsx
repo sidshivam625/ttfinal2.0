@@ -162,7 +162,9 @@ export default function MissionsPage() {
                                     ]}
                                     briefingLabel="CLASSIFIED.BRIEFING"
                                 />
-                                <Terminal onSubmit={validateFlag} />
+                                {statuses[currentIdx] !== 'done' && (
+                                    <Terminal onSubmit={validateFlag} />
+                                )}
                             </>
                         ) : (
                              <div className="text-center text-gray-400 font-mono text-xl p-8 bg-[#2b0f1a]/50 rounded-xl border border-[#7a2f49]">All missions complete, Operative. Well done.</div>
@@ -177,6 +179,7 @@ export default function MissionsPage() {
                             cellSize="auto"
                             initialStatuses={statuses}
                             onCellClick={setCurrentIdx}
+                            activeIndex={currentIdx}
                             title="GRID.STATUS"
                         />
                         {currentChallenge && <IntelFiles links={currentChallenge.links} />}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 export type CellStatus = "active" | "done" | "locked";
 
@@ -25,20 +25,22 @@ export default function QuestionGrid({
   onCellClick,
   activeIndex,
 }: GridStatusProps) {
-  // Keep a local status map initialized from props. Parent updates are expected via prop changes.
-  const [statusMap] = useState<Record<number, CellStatus>>(initialStatuses);
+  // Use props directly so updates from parent are reflected immediately.
+  const statusMap: Record<number, CellStatus> = initialStatuses;
 
   const items = useMemo(() => Array.from({ length: total }, (_, i) => i + 1), [
     total,
   ]);
 
   const handleCellClick = (i: number) => {
-    const current = statusMap[i] ?? "locked";
+    // Parent status map is 0-based; tile labels are 1-based
+    const current = statusMap[i - 1] ?? "locked";
     if (current === "locked") return; // ignore click
     if (onCellClick) onCellClick(i - 1); // Pass zero-based index to parent
   };
 
-  const getStatus = (i: number): CellStatus => statusMap[i] ?? "locked";
+  // Parent status map is 0-based; tile labels are 1-based
+  const getStatus = (i: number): CellStatus => (statusMap[i - 1] ?? "locked");
 
   return (
     <section
@@ -81,18 +83,20 @@ export default function QuestionGrid({
       >
         {items.map((i) => {
           const status = getStatus(i);
+          const isActiveSelected = typeof activeIndex === 'number' && (i - 1) === activeIndex;
           let borderColor = "#522546";
           let hoverBorder = "#6B3F63";
           let animationStyle: React.CSSProperties = {};
-          const backgroundColor = "transparent";
+          let backgroundColor = "transparent";
 
-          if (status === "active") {
+          if (isActiveSelected) {
             borderColor = "#FF6467";
             hoverBorder = "#FF8A8F";
             animationStyle = { animation: "flashRed 2.5s infinite linear" };
           } else if (status === "done") {
             borderColor = "#89304E";
             hoverBorder = "#A04561";
+            backgroundColor = "#89304E";
           } else if (status === "locked") {
             borderColor = "#522546";
             hoverBorder = "#6B3F63";
