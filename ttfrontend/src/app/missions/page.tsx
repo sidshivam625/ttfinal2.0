@@ -1,12 +1,12 @@
 "use client";
-import CTFCard from "./components/question_box";
 import QuestionGrid from "./components/question_grid";
+import CTFCard from "./components/question_box";
 import Terminal from "./components/terminal";
-import QRPuzzle from "./components/qr_puzzle"; // NEW IMPORT
-// IntelFiles component unused in this page; omitted import
+import IntelFiles from "./components/downloadFiles";
 import { auth, db } from "../../../lib/firebaseClient";
 import { collection, getDocs } from "firebase/firestore";
 import { useEffect, useState } from "react";
+
 
 // Your original, unchanged logic is here
 export default function MissionsPage() {
@@ -120,6 +120,17 @@ export default function MissionsPage() {
             </div>
         </main>
     );
+    
+    if (!uid) {
+        return (
+            <main className="min-h-screen bg-[#0d0d0d] p-6 flex items-center justify-center text-center">
+                <div>
+                    <p className="mb-4 font-mono text-lg text-gray-300">Please sign in to access missions.</p>
+                    <a className="underline text-pink-500 font-vt323" href="/enlist">Go to Enlist Page</a>
+                </div>
+            </main>
+        );
+    }
 
     if (!challenges.length) return <div className="p-6 text-center text-lg">No missions found.</div>;
 
@@ -127,43 +138,52 @@ export default function MissionsPage() {
 
     // This is the new UI layout that arranges your components
     return (
-        <main className="p-6 flex flex-col items-center gap-8">
-            <h1 className="text-2xl font-bold mb-2">Missions</h1>
-            <QuestionGrid
-                total={challenges.length || 25}
-                columns={5}
-                cellSize="60px"
-                initialStatuses={statuses}
-                title="Questions"
-                gridWidth="100%"
-                gridHeight="auto"
-                onCellClick={setCurrentIdx}
-            />
-            <div className="w-full max-w-[700px]">
-                {challenges[currentIdx] && (
-                    <CTFCard
-                        title={challenges[currentIdx].challengeId || `Challenge ${currentIdx + 1}`}
-                        description={challenges[currentIdx].description || "No description."}
-                        difficulty={challenges[currentIdx].difficulty || "HARD"}
-                        briefingLabel="Briefing"
-                        customContent={
-                            // NEW: Show QR puzzle for custom challenges
-                            challenges[currentIdx].isCustom ? (
-                                <QRPuzzle challengeId={challenges[currentIdx].challengeId || challenges[currentIdx].id} />
-                            ) : null
-                        }
-                    />
-                )}
-            </div>
-            <div className="w-full max-w-[700px] mt-6">
-                <Terminal
-                    onSubmit={async (flag: string) => {
-                        return await validateFlag(flag);
-                    }}
-                />
-            </div>
+        <div className="min-h-screen bg-[#0d0d0d] text-white">
 
-        </main>
+            <div className="relative z-10 p-4 sm:p-8 lg:p-12">
+                <header className="flex items-center gap-6 pb-8 border-b-2 border-[#522546] mb-8">
+                    <h1 className="font-vt323 text-4xl text-white tracking-widest">
+                        MISSION NO.{String(currentChallenge?.questionNumber || currentIdx + 1).padStart(2, '0')}
+                    </h1>
+                    <div className="flex-1 h-px bg-gradient-to-r from-[#522546] to-transparent"></div>
+                </header>
 
+                <main className="grid grid-cols-1 lg:grid-cols-10 gap-8">
+                    {/* Left Column (70%) */}
+                    <div className="lg:col-span-7 flex flex-col gap-8">
+                        {currentChallenge ? (
+                            <>
+                                <CTFCard
+                                    title={currentChallenge.title || `Challenge ${currentIdx + 1}`}
+                                    description={currentChallenge.description || "No description."}
+                                    chips={[
+                                        { label: currentChallenge.Level || 'N/A', color: '#FFDDC7', border: '#89304E', bg: '#522546' },
+                                        { label: `${currentChallenge.points || 0} PTS`, color: '#FFDDC7', border: '#89304E', bg: '#522546' }
+                                    ]}
+                                    briefingLabel="CLASSIFIED.BRIEFING"
+                                />
+                                <Terminal onSubmit={validateFlag} />
+                            </>
+                        ) : (
+                             <div className="text-center text-gray-400 font-mono text-xl p-8 bg-[#2b0f1a]/50 rounded-xl border border-[#7a2f49]">All missions complete, Operative. Well done.</div>
+                        )}
+                    </div>
+
+                    {/* Right Column (30%) */}
+                    <div className="lg:col-span-3 flex flex-col gap-8">
+                        <QuestionGrid
+                            total={challenges.length}
+                            columns={5}
+                            cellSize="auto"
+                            initialStatuses={statuses}
+                            onCellClick={setCurrentIdx}
+                            title="GRID.STATUS"
+                        />
+                        {currentChallenge && <IntelFiles links={currentChallenge.links} />}
+                    </div>
+                </main>
+            </div>
+        </div>
     );
 }
+

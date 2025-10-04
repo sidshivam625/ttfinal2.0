@@ -7,7 +7,7 @@ import { signOut, sendEmailVerification } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { auth, functions } from '../../../lib/firebaseClient';
 import { Mail, Hash, Phone, ShieldCheck, ShieldAlert, Gem, Award, LogOut, Loader2, MailWarning } from 'lucide-react';
-import Background from '../../utils/Background';
+import Background from '../../utils/Background'; // Assuming this component exists
 
 // --- TYPE DEFINITIONS ---
 interface ProfileData { name: string; email: string; delegateId: string; phone: string; points: number; solvedQuestions: number; unsolvedQuestions: number; }
@@ -19,7 +19,7 @@ const ProfilePlaceholder = ({ initial }: { initial: string }) => ( <div classNam
 const UserProfileCard: React.FC<{ user: ProfileData & { title: string } }> = ({ user }) => ( <div className={`group bg-[#2f1f2b]/50 border border-[#ef3b57]/20 text-[#d9bfc6] rounded-lg p-6 sm:p-8 flex flex-col items-center sm:items-start shadow-lg ${CARD_HOVER_EFFECT}`}> <div className="flex flex-col sm:flex-row items-center w-full"> <div className="flex-shrink-0 mb-4 sm:mb-0 sm:mr-6"> <ProfilePlaceholder initial={user.name ? user.name.charAt(0) : '?'} /> </div> <div className="text-center sm:text-left"> <h1 className="font-vt323 text-4xl sm:text-5xl text-[#ffdcdc]">{user.name}</h1> <p className="font-mono text-base text-[#d9bfc6]/80 mt-1">{user.title}</p> </div> </div> <hr className="w-full border-t border-[#ef3b57]/20 my-6" /> <div className="w-full"> <h2 className="font-vt323 text-xl text-[#ef3b57] mb-4">CONTACT & ID</h2> <div className="space-y-4 text-base font-mono"> <div className="flex items-center gap-3"> <Mail className="w-5 h-5 text-[#ef3b57]/80" /> <span className="text-[#d9bfc6] break-all">{user.email}</span> </div> <div className="flex items-center gap-3"> <Hash className="w-5 h-5 text-[#ef3b57]/80" /> <span className="text-[#d9bfc6] font-bold">{user.delegateId}</span> </div> <div className="flex items-center gap-3"> <Phone className="w-5 h-5 text-[#ef3b57]/80" /> <span className="text-[#d9bfc6]">{user.phone}</span> </div> </div> </div> </div> );
 const StatItem: React.FC<{ label: string, value: number | string, icon: React.ReactNode, isPrimary?: boolean }> = ({ label, value, icon, isPrimary = false }) => ( <div className={`bg-[#2f1f2b]/50 border border-[#ef3b57]/20 p-4 rounded-lg text-center flex flex-col justify-center items-center shadow-md ${CARD_HOVER_EFFECT}`}> <div className={`mb-2 ${isPrimary ? 'text-[#ef3b57]' : 'text-[#d9bfc6]/80'}`}>{icon}</div> <p className={`font-vt323 ${isPrimary ? 'text-5xl text-[#ffdcdc]' : 'text-4xl text-[#ffdcdc]'}`}>{value}</p> <p className="font-mono text-sm text-[#d9bfc6]/80 mt-1 uppercase tracking-wider">{label}</p> </div> );
 
-// --- MAIN PAGE LOGIC (With Verification Gate) ---
+// --- MAIN PAGE LOGIC ---
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -31,7 +31,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!authLoading) {
       if (user) {
-        // We fetch profile data regardless of verification status
+        // Fetch profile data even if not verified, to show email on prompt screen
         const fetchProfile = async () => {
           setLoading(true);
           try {
@@ -43,7 +43,7 @@ export default function ProfilePage() {
         };
         fetchProfile();
       } else {
-        router.push('/');
+        router.push('/'); // Redirect to homepage if not logged in at all
       }
     }
   }, [user, authLoading, router]);
@@ -54,6 +54,7 @@ export default function ProfilePage() {
       try {
         await sendEmailVerification(user);
         setVerificationSent(true);
+        // Disable button for 30 seconds to prevent spam
         setTimeout(() => setVerificationSent(false), 30000);
       } catch (error) { setError("Failed to send verification email."); }
     }
@@ -63,7 +64,7 @@ export default function ProfilePage() {
     return <div className="min-h-screen bg-gray-900 flex items-center justify-center"><Loader2 size={48} className="animate-spin text-pink-500"/></div>;
   }
 
-  // --- GATEKEEPER LOGIC ---
+  // --- NEW: EMAIL VERIFICATION GATE ---
   if (user && !user.emailVerified) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#1b1b1b]">
@@ -76,7 +77,7 @@ export default function ProfilePage() {
             <button onClick={handleResendVerification} disabled={verificationSent} className="w-full px-4 py-3 font-vt323 uppercase tracking-wider text-lg text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-300">
               {verificationSent ? 'SENT!' : 'RESEND EMAIL'}
             </button>
-            <button onClick={handleLogout} className="w-full px-4 py-3 font-vt323 uppercase tracking-wider text-lg text-white bg-gray-700 rounded-lg hover:bg-gray-600 flex items-center justify-center transition-all duration-300">
+            <button onClick={handleLogout} className="">
               <LogOut size={20} className="mr-2"/>
               LOGOUT
             </button>
@@ -86,6 +87,7 @@ export default function ProfilePage() {
     );
   }
 
+  // This part will only render if the user is verified
   if (error || !profile) {
     return <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-red-400 p-4">
        <h2 className="text-2xl font-bold">Error Loading Profile</h2>
@@ -123,3 +125,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+

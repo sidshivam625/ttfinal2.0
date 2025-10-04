@@ -13,6 +13,7 @@ interface GridStatusProps {
   gridWidth?: string;
   gridHeight?: string;
   onCellClick?: (idx: number) => void;
+  activeIndex?: number;
 }
 
 export default function QuestionGrid({
@@ -22,6 +23,7 @@ export default function QuestionGrid({
   title = "GRID.STATUS",
   initialStatuses = {},
   onCellClick,
+  activeIndex,
 }: GridStatusProps) {
   // Keep a local status map initialized from props. Parent updates are expected via prop changes.
   const [statusMap] = useState<Record<number, CellStatus>>(initialStatuses);
