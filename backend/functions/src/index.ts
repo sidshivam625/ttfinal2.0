@@ -316,15 +316,15 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
         }
       }
 
-      // Check if this is a custom challenge first
-      const challengeRef = db.collection('challenges').doc(challengeId)
-      const challengeSnap = await challengeRef.get()
-      const challengeData = challengeSnap.exists ? challengeSnap.data() : {}
-      
+      // Check if this is a custom challenge first (for validation only)
+      const challengeRefTop = db.collection('challenges').doc(challengeId)
+      const challengeSnapTop = await challengeRefTop.get()
+      const challengeDataTop = challengeSnapTop.exists ? challengeSnapTop.data() : {}
+
       const submitted = String(flag ?? '').trim()
       let isCorrect = false
-      
-      if (challengeData?.isCustom && uid) {
+
+      if (challengeDataTop?.isCustom && uid) {
         // Handle custom flag validation
         const collectionName = `customFlagChallenge${challengeId.replace('challenge', '')}`;
         const customFlagsSnap = await db.collection(collectionName)
@@ -336,7 +336,6 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
         if (!customFlagsSnap.empty) {
           const customFlagData = customFlagsSnap.docs[0].data()
           isCorrect = submitted === customFlagData.flagData.originalFlag
-          
           if (isCorrect) {
             // Mark custom flag as used
             await customFlagsSnap.docs[0].ref.update({ isUsed: true })
@@ -377,7 +376,23 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
         }
       }
 
+      // Helper: load challenge scoring config inside transactions
+      const loadChallengeConfig = async (tx: FirebaseFirestore.Transaction, cid: string) => {
+        const cRef = db.collection('challenges').doc(cid)
+        const cSnap = await tx.get(cRef)
+        const cData = cSnap.exists ? cSnap.data() as any : {}
+        const points = Number(cData?.points || cData?.positivePoints || 100)
+        const free = Number(cData?.totalAttempts ?? 1000)   // free attempts
+        const unlimited = free >= 1000                      // treat >=1000 as unlimited
+        const penaltyPer = Number(cData?.penaltyPerExtraAttempt ?? 10)
+        return { points, free, unlimited, penaltyPer }
+      }
+
       if (isCorrect) {
+        // Do NOT penalize the correct attempt itself; only prior wrong attempts
+        let responsePenalty = 0
+        let responseActualScore = 0
+
         if (uid) {
           const userRef = db.collection('users').doc(uid)
           await db.runTransaction(async (tx) => {
@@ -385,34 +400,64 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
             const data = (snap.exists ? snap.data() : {}) as any
             const logs: any[] = Array.isArray(data?.solved_logs) ? data.solved_logs : []
             const cid = challengeId
-            const index = logs.findIndex((e) => (e?.challengeId || '').toLowerCase().replace(/\s+/g,'') === String(cid).toLowerCase().replace(/\s+/g,''))
+            const idx = logs.findIndex((e) => (e?.challengeId || '').toLowerCase().replace(/\s+/g,'') === String(cid).toLowerCase().replace(/\s+/g,''))
             const nowIso = new Date().toISOString()
-            if (index >= 0) {
-              const entry = { ...logs[index] }
-              const attempts = Number(entry.attempts || 0) + 1
+
+            if (idx >= 0) {
+              const entry = { ...logs[idx] }
+              const attemptsBefore = Number(entry.attempts || 0)
+              const attempts = attemptsBefore + 1
+
               if (!entry.solvedAt || entry.solvedAt === '') {
-                const challengeRef = db.collection('challenges').doc(cid)
-                const challengeSnap = await tx.get(challengeRef)
-                const challengeData = challengeSnap.exists ? challengeSnap.data() : {}
-                const points = Number((challengeData as any)?.points || (challengeData as any)?.positivePoints || 100)
-                logs[index] = { ...entry, attempts, solvedAt: nowIso, actualScore: points, positivePoints: points }
+                const { points, free, unlimited, penaltyPer } = await loadChallengeConfig(tx, cid)
+                const extraAttempts = unlimited ? 0 : Math.max(0, attemptsBefore - free) // exclude the correct attempt
+                const penalty = extraAttempts * penaltyPer
+                const prevActual = Number(entry.actualScore || 0)
+                const actualScore = points - penalty
+
+                logs[idx] = { ...entry, attempts, solvedAt: nowIso, positivePoints: points, penalty, actualScore }
+                const delta = actualScore - prevActual
+                tx.set(userRef, { totalScore: admin.firestore.FieldValue.increment(delta) }, { merge: true })
+
+                responsePenalty = penalty
+                responseActualScore = actualScore
               } else {
-                logs[index] = { ...entry, attempts }
+                // Already solved: just track attempts; do not change score or penalty
+                logs[idx] = { ...entry, attempts }
               }
             } else {
-              const challengeRef = db.collection('challenges').doc(cid)
-              const challengeSnap = await tx.get(challengeRef)
-              const challengeData = challengeSnap.exists ? challengeSnap.data() : {}
-              const points = Number((challengeData as any)?.points || (challengeData as any)?.positivePoints || 100)
-              logs.push({ challengeId: cid, attempts: 1, solvedAt: nowIso, actualScore: points, penalty: 0, positivePoints: points })
+              // First record for this challenge; attempts=1 includes this correct attempt
+              const { points, free, unlimited, penaltyPer } = await loadChallengeConfig(tx, cid)
+              const attemptsBefore = 0
+              const attempts = 1
+              const extraAttempts = unlimited ? 0 : Math.max(0, attemptsBefore - free) // exclude the correct attempt
+              const penalty = extraAttempts * penaltyPer
+              const actualScore = points - penalty
+
+              logs.push({ challengeId: cid, attempts, solvedAt: nowIso, positivePoints: points, penalty, actualScore })
+              tx.set(userRef, { totalScore: admin.firestore.FieldValue.increment(actualScore) }, { merge: true })
+
+              responsePenalty = penalty
+              responseActualScore = actualScore
             }
+
             tx.set(userRef, { solved_logs: logs }, { merge: true })
           })
         }
-        return res.status(200).json({ success: true, message: 'Correct! Next question unlocked.' })
+
+        return res.status(200).json({
+          success: true,
+          message: 'Correct! Next question unlocked.',
+          penalty: responsePenalty,
+          actualScore: responseActualScore
+        })
       }
 
       // incorrect
+      // For limited challenges (<1000), include attempts left and cumulative total penalty in response
+      let freeAttemptsLeft: number | null = null
+      let currentPenalty: number = 0
+
       if (uid) {
         const userRef = db.collection('users').doc(uid)
         await db.runTransaction(async (tx) => {
@@ -420,25 +465,57 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
           const data = (snap.exists ? snap.data() : {}) as any
           const logs: any[] = Array.isArray(data?.solved_logs) ? data.solved_logs : []
           const cid = challengeId
-          const index = logs.findIndex((e) => (e?.challengeId || '').toLowerCase().replace(/\s+/g,'') === String(cid).toLowerCase().replace(/\s+/g,''))
-          if (index >= 0) {
-            const entry = { ...logs[index] }
+          const idx = logs.findIndex((e) => (e?.challengeId || '').toLowerCase().replace(/\s+/g,'') === String(cid).toLowerCase().replace(/\s+/g,''))
+
+          const { free, unlimited, penaltyPer } = await loadChallengeConfig(tx, cid)
+
+          if (idx >= 0) {
+            const entry = { ...logs[idx] }
             const attempts = Number(entry.attempts || 0) + 1
-            logs[index] = { ...entry, attempts }
+
+            if (!entry.solvedAt || entry.solvedAt === '') {
+              // Count this wrong attempt in penalty
+              const extraAttempts = unlimited ? 0 : Math.max(0, attempts - free)
+              const penalty = extraAttempts * penaltyPer
+              currentPenalty = penalty
+              freeAttemptsLeft = unlimited ? null : Math.max(0, free - attempts)
+
+              logs[idx] = { ...entry, attempts, penalty }
+            } else {
+              // Already solved: only track attempts; no further penalty after solve
+              logs[idx] = { ...entry, attempts }
+            }
           } else {
-            logs.push({ challengeId: cid, attempts: 1, solvedAt: '', actualScore: 0, penalty: 0, positivePoints: 0 })
+            const attempts = 1
+            const extraAttempts = unlimited ? 0 : Math.max(0, attempts - free)
+            const penalty = extraAttempts * penaltyPer
+            currentPenalty = penalty
+            freeAttemptsLeft = unlimited ? null : Math.max(0, free - attempts)
+
+            logs.push({ challengeId: cid, attempts, solvedAt: '', actualScore: 0, penalty, positivePoints: 0 })
           }
+
           tx.set(userRef, { solved_logs: logs }, { merge: true })
         })
       }
-      return res.status(200).json({ success: false, message: 'Incorrect flag.' })
+
+      const incorrectMsg = freeAttemptsLeft == null
+        ? 'Incorrect flag.'
+        : `Incorrect flag. Attempts left: ${freeAttemptsLeft}. Total penalty: ${currentPenalty}`
+
+      return res.status(200).json({
+        success: false,
+        message: incorrectMsg,
+        attemptsLeft: freeAttemptsLeft,
+        freeAttemptsLeft,
+        totalPenalty: freeAttemptsLeft == null ? null : currentPenalty
+      })
     } catch (err: any) {
       console.error('adminSubmitFlag error', err)
       return res.status(500).json({ success: false, error: 'Server error', details: err?.message || String(err) })
     }
   })
 })
-
 // --- QR CODE GENERATION FUNCTIONS ---
 
 // QR Code generation using qrcode-generator with quadrant swap/rotate (no trapezoid warp)
