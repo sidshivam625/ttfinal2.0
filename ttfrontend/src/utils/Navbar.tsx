@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext'; // Adjust path if needed
 
 import { Bot, Loader2 } from 'lucide-react';
+import { Loader } from './Loader';
 
 const baseNavClasses = "text-base md:text-lg px-3 py-1.5 rounded transition-all duration-300 uppercase";
 const activeNavClasses = "text-[#ef3b57] shadow-[0_0_20px_rgba(239,59,87,0.15)] bg-[#ef3b57]/5";
@@ -28,7 +29,7 @@ export default function Navbar() {
     if (loading) {
       return (
         <div className={`${baseNavClasses} text-[#d9bfc6]`}>
-          <Loader2 className="animate-spin" />
+          <Loader/>
         </div>
       );
     }
@@ -87,6 +88,7 @@ export default function Navbar() {
 
         {/* This now calls our robust render function */}
         {renderAuthLinks()}
+
       </div>
     </nav>
   );

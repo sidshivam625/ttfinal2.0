@@ -16,6 +16,9 @@ import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../lib/firebaseClient";
 import { Loader2, BarChart2 } from "lucide-react";
+import { Loader } from "@/utils/Loader";
+import CTFButton from "@/utils/CTFButton";
+import Link from "next/link";
 
 // --- TYPE DEFINITIONS ---
 // For the chart (Top 10 with detailed history)
@@ -126,25 +129,27 @@ export default function LeaderboardPage() {
       <div className="min-h-screen bg-[#1b1b1b] flex items-center justify-center">
 
         <div className="text-center z-10">
-          <Loader2 size={48} className="animate-spin text-pink-500 mx-auto" />
-          <p className="font-mono text-lg text-gray-400 mt-4">Fetching Leaderboard Data...</p>
+          <Loader/>
+          <p className="font-press-start-2p text-lg text-gray-400 mt-4">Deriving Leaderboard Data</p>
         </div>
       </div>
     );
   }
 
   if (error) {
-     return <div className="min-h-screen bg-[#1b1b1b] flex flex-col items-center justify-center text-red-400 p-4">
-       <h2 className="text-2xl font-bold">Error</h2>
-       <p className="mt-2 text-center">{error}</p>
-       <a href="/missions" className="mt-6 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700">Return to Missions</a>
+     return <div className="min-h-screen font-press-start-2p flex flex-col items-center justify-center text-[#ef3b57] p-4">
+       <h2 className="text-2xl m-8 font-bold">Error</h2>
+       <p className="mt-2 m-8 text-center">{error}</p>
+       <Link href={"/missions"}>
+       <CTFButton text="Return to Missions"/>
+       </Link>
      </div>;
   }
 
   const chartData = transformDataForChart(topTenHistory);
 
   return (
-    <div className="min-h-screen bg-[#1b1b1b] text-white">
+    <div className="min-h-screen  text-white">
 
       <div className="relative z-10 p-4 sm:p-8 lg:p-12 max-w-7xl mx-auto">
         <header className="flex items-center gap-4 pb-8 mb-8">
@@ -178,7 +183,7 @@ export default function LeaderboardPage() {
                         formatter={(value: number) => `${value.toLocaleString()} pts`}
                         labelFormatter={(label) => `Time: ${new Date(label).toLocaleString()}`}
                     />
-                    <Legend wrapperStyle={{ fontFamily: 'monospace', fontSize: '12px' }}/>
+                    {/* <Legend wrapperStyle={{ fontFamily: 'monospace', fontSize: '12px' }}/> */}
                     {topTenHistory.map((player, index) => (
                         <Line
                             key={player.uid}
@@ -197,13 +202,13 @@ export default function LeaderboardPage() {
         {/* --- LEADERBOARD TABLE (for All Users) --- */}
         <div className="bg-[#2b0f1a]/50 p-6 rounded-xl border border-[#7a2f49] shadow-lg">
           <div className="overflow-x-auto">
-            <table className="w-full font-mono text-left">
+            <table className="w-full font-vt323  text-left">
               <thead className="border-b-2 border-[#7a2f49]">
                 <tr>
-                  <th className="p-3 text-lg font-vt323 text-[#ef3b57] text-center w-16">Rank</th>
-                  <th className="p-3 text-lg font-vt323 text-[#ef3b57]">Operative</th>
-                  <th className="p-3 text-lg font-vt323 text-[#ef3b57] text-center">Missions Solved</th>
-                  <th className="p-3 text-lg font-vt323 text-[#ef3b57] text-right">Total Score</th>
+                  <th className="p-3 text-xs font-press-start-2p text-[#ef3b57] text-center w-16">Rank</th>
+                  <th className="p-3 text-xs font-press-start-2p text-[#ef3b57]">Operative</th>
+                  <th className="p-3 text-xs font-press-start-2p text-[#ef3b57] text-center">Missions Solved</th>
+                  <th className="p-3 text-xs font-press-start-2p text-[#ef3b57] text-right">Total Score</th>
                 </tr>
               </thead>
               <tbody>

@@ -6,6 +6,9 @@ import IntelFiles from "./components/downloadFiles";
 import { auth, db } from "../../../lib/firebaseClient";
 import { collection, getDocs } from "firebase/firestore";
 import { useEffect, useState } from "react";
+import CTFButton from "@/utils/CTFButton";
+import Link from "next/link";
+import { Loader } from "@/utils/Loader";
 
 
 // Your original, unchanged logic is here
@@ -113,26 +116,26 @@ export default function MissionsPage() {
     }
 
     if (loading) return (
-        <main className="min-h-screen bg-[#0d0d0d] p-6 flex items-center justify-center">
+        <main className="min-h-screen text-[#ef3b57] font-press-start-2p p-6 flex items-center justify-center">
             <div className="flex flex-col items-center gap-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-pink-500"></div>
-                <span className="text-lg font-bold text-pink-500 font-vt323">Loading missions...</span>
+                <Loader/>
+                <span className="text-lg font-bold ">Loading missions..</span>
             </div>
         </main>
     );
     
     if (!uid) {
         return (
-            <main className="min-h-screen bg-[#0d0d0d] p-6 flex items-center justify-center text-center">
+            <main className="min-h-screen font-press-start-2p text-[#ef3b57] p-6 flex items-center justify-center text-center">
                 <div>
-                    <p className="mb-4 font-mono text-lg text-gray-300">Please sign in to access missions.</p>
-                    <a className="underline text-pink-500 font-vt323" href="/enlist">Go to Enlist Page</a>
+                    <p className="mb-4 text-lg">Please sign in to access missions.</p>
+                    <Link  href="/enlist"><CTFButton text="Go to Enlist"/></Link>
                 </div>
             </main>
         );
     }
 
-    if (!challenges.length) return <div className="p-6 text-center text-lg">No missions found.</div>;
+    if (!challenges.length) return <div className="text-[#ef3b57] font-press-start-2p flex justify-center items-center">No missions found.</div>;
 
     const currentChallenge = challenges[currentIdx];
 

@@ -2,10 +2,11 @@
 
 import React from 'react';
 import { Loader2 } from 'lucide-react';
+import { Loader } from '@/utils/Loader';
 
 // Reusable Base Components
 const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} className="w-full px-4 py-3 mb-4 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7A2F49] transition-all" />;
-const Button = ({ loading, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading: boolean }) => <button {...props} disabled={loading} className="w-full px-4 py-3 font-bold text-white bg-[#7a2744] rounded-lg hover:bg-[#792442] disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center transition-colors">{loading ? <Loader2 className="animate-spin" /> : children}</button>;
+const Button = ({ loading, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading: boolean }) => <button {...props} disabled={loading} className="inline-block mx-auto max-w-xs px-6 py-3 bg-transparent border border-[#ef3b57] text-[#ef3b57] font-vt323 rounded hover:bg-[#ef3b57]/20 hover:scale-105 hover:shadow-lg transition-all duration-300 uppercase">{loading ? <Loader/>: children}</button>;
 
 // --- EXPORTED FORM COMPONENTS ---
 

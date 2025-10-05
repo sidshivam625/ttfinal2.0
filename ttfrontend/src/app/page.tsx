@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext"; // Make sure this path is c
 import Background from "@/utils/Background";
 import GlitchText from "@/utils/GlitchText";
 import { Loader2 } from "lucide-react";
+import { Loader } from "@/utils/Loader";
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -14,7 +15,7 @@ export default function Home() {
     if (loading) {
       return (
         <div className="inline-flex items-center justify-center mx-auto max-w-xs px-6 py-3 bg-transparent border border-[#ef3b57] text-[#ef3b57] font-vt323 rounded uppercase">
-          <Loader2 className="animate-spin" />
+          <Loader/>
         </div>
       );
     }
