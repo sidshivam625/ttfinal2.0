@@ -57,6 +57,30 @@ export default function QRPuzzle({ challengeId }: QRPuzzleProps) {
 
   if (!qrData) return null;
 
+  const mime = qrData?.type === 'svg' ? 'image/svg+xml' : 'image/png';
+  const ext = qrData?.type === 'svg' ? 'svg' : 'png';
+  // Sanitize possible malformed SVG base64 payloads where xmlns is wrapped like [http://...]
+  let dataBase64: string = qrData.distortedQR || '';
+  if (qrData?.type === 'svg' && dataBase64) {
+    try {
+      const svgText = atob(dataBase64);
+      let fixed = svgText;
+      // Replace markdown link style and bracketed variants with plain URI
+      fixed = fixed.replace(/\[http:\/\/www\.w3\.org\/2000\/svg\]\(http:\/\/www\.w3\.org\/2000\/svg\)/g, 'http://www.w3.org/2000/svg');
+      fixed = fixed.replace(/\[http:\/\/www\.w3\.org\/2000\/svg\]/g, 'http://www.w3.org/2000/svg');
+      // If the xmlns attribute exists and looks wrong, normalize it
+      fixed = fixed.replace(/xmlns="[^"]*"/, (m) => {
+        if (m.includes('w3.org') || m.includes('[') || m.includes('(')) {
+          return 'xmlns="http://www.w3.org/2000/svg"';
+        }
+        return m;
+      });
+      if (fixed !== svgText) {
+        dataBase64 = btoa(fixed);
+      }
+    } catch {}
+  }
+
   return (
     <div className="mt-6 p-6 border-2 border-[#522546] rounded-lg bg-black/50">
       <div className="mb-4">
@@ -78,7 +102,7 @@ export default function QRPuzzle({ challengeId }: QRPuzzleProps) {
           </h4>
           <div className="border border-[#FF6467] rounded p-6 bg-black/30">
             <img 
-              src={`data:image/png;base64,${qrData.distortedQR}`} 
+              src={`data:${mime};base64,${dataBase64}`} 
               alt="Corrupted and Distorted QR Code"
               className="w-full max-w-[300px] mx-auto"
               style={{ imageRendering: 'pixelated', width: '300px', height: '300px', objectFit: 'contain' }}
@@ -134,11 +158,11 @@ export default function QRPuzzle({ challengeId }: QRPuzzleProps) {
       {/* Download button for convenience */}
       <div className="mt-4 flex justify-center">
         <a
-          href={`data:image/png;base64,${qrData.distortedQR}`}
-          download={`corrupted_qr_${challengeId}.png`}
+          href={`data:${mime};base64,${dataBase64}`}
+          download={`corrupted_qr_${challengeId}.${ext}`}
           className="px-6 py-2 bg-[#FF6467]/20 border border-[#FF6467] rounded text-[#FF6467] hover:bg-[#FF6467]/30 font-vt323 text-sm transition-colors"
         >
-          DOWNLOAD DISTORTED QR CODE (PNG)
+          DOWNLOAD DISTORTED QR CODE ({ext.toUpperCase()})
         </a>
       </div>
     </div>

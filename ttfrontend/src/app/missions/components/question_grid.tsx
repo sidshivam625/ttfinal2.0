@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, ReactNode } from "react";
 
 export type CellStatus = "active" | "done" | "locked";
 
@@ -14,6 +14,7 @@ interface GridStatusProps {
   gridHeight?: string;
   onCellClick?: (idx: number) => void;
   activeIndex?: number;
+  extraContent?: ReactNode;
 }
 
 export default function QuestionGrid({
@@ -24,6 +25,7 @@ export default function QuestionGrid({
   initialStatuses = {},
   onCellClick,
   activeIndex,
+  extraContent,
 }: GridStatusProps) {
   // Use props directly so updates from parent are reflected immediately.
   const statusMap: Record<number, CellStatus> = initialStatuses;
@@ -127,6 +129,12 @@ export default function QuestionGrid({
           );
         })}
       </div>
+
+      {extraContent && (
+        <div className="mt-4">
+          {extraContent}
+        </div>
+      )}
 
       {/* Vertical Legend */}
       <ul className="mt-2 flex flex-col gap-2 text-sm">
