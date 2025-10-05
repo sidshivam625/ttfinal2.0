@@ -106,7 +106,7 @@ export default function QuestionGrid({
             <button
               key={i}
               onClick={() => handleCellClick(i)}
-              className="flex items-center justify-center font-mono text-foreground/90 rounded-md transition-all duration-150 cursor-pointer"
+              className="flex items-center justify-center font-vt323 text-foreground/90 rounded-md transition-all duration-150 cursor-pointer"
               style={{
                 border: `2px solid ${borderColor}`,
                 backgroundColor,
@@ -133,7 +133,7 @@ export default function QuestionGrid({
         <li className="inline-flex items-center gap-3">
           <span className="inline-block w-3 h-3 rounded-full bg-[#FF6467] shadow-[0_0_8px_rgba(255,100,103,0.6)]" />
           <span
-            className="font-monospace"
+            className="font-vt323"
             style={{
               color: "#FF6467",
               textShadow: "0 0 4px rgba(255,100,103,0.6)",
@@ -145,7 +145,7 @@ export default function QuestionGrid({
         <li className="inline-flex items-center gap-3">
           <span className="inline-block w-3 h-3 rounded-full bg-[#89304E] shadow-[0_0_6px_rgba(137,48,78,0.4)]" />
           <span
-            className="font-monospace"
+            className="font-vt323"
             style={{
               color: "#89304E",
               textShadow: "0 0 4px rgba(137,48,78,0.4)",
@@ -157,7 +157,7 @@ export default function QuestionGrid({
         <li className="inline-flex items-center gap-3">
           <span className="inline-block w-3 h-3 rounded-full border border-[#522546]" />
           <span
-            className="font-monospace"
+            className="font-vt323"
             style={{
               color: "#522546",
               textShadow: "0 0 4px rgba(82,37,70,0.4)",

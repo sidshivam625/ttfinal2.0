@@ -171,9 +171,9 @@ export default function AuthPage() {
         <Background />
         <Card> {renderStep()} </Card>
         {error && <p className="w-full max-w-md mt-4 text-center text-sm text-red-400 bg-red-900/50 p-3 rounded-lg">{error}</p>}
-        <div className="mt-6 text-center font-mono">
-            {step === 'login' && <p className="text-gray-400 text-xs font-press-start-2p">Not working for THE CREATOR? <button onClick={() => setStep('verify')} className="font-semibold cursor-pointer text-[#ef3b57] hover:underline">Enlist Now</button></p>}
-            {step !== 'login' && <p className="text-gray-400 text-xs font-press-start-2p">Already Granted Access? <button onClick={() => setStep('login')} className="font-semibold cursor-pointer text-[#ef3b57] hover:underline">Log In</button></p>}
+        <div className="mt-6 text-center text-gray-400 text-xs font-press-start-2p">
+            {step === 'login' && <p>Not working for THE CREATOR? <button onClick={() => setStep('verify')} className="font-semibold cursor-pointer text-[#ef3b57] hover:underline">Enlist Now</button></p>}
+            {step !== 'login' && <p>Already Granted Access? <button onClick={() => setStep('login')} className="font-semibold cursor-pointer text-[#ef3b57] hover:underline">Log In</button></p>}
         </div>
     </main>
   );

@@ -7,11 +7,11 @@ import Background from '../../utils/Background';
 const ProtocolCard = () => {
     return (
 
-        <div className="border border-[#522546] w-full max-w-4xl">
+        <div className="border bg-black/70 rounded-xl border-[#522546] w-full max-w-4xl">
             <Background/>
             <div className=" text-white p-3 flex items-center justify-center gap-2 font-bold text-lg">
                 <span>//</span>
-                <span>OPERATION_PROTOCOLS.md</span>
+                <span className='font-press-start-2p'>OPERATION_PROTOCOLS.md</span>
                 <span>//</span>
             </div>
             <div className="p-8 space-y-6">
@@ -97,7 +97,7 @@ const ProtocolsPage = () => {
     return (
         // Set a dark background and use the custom font for the whole page.
         // min-h-screen ensures the background covers the full height, and allows scrolling.
-        <div className="bg-black text-[#22c55e] font-['VT323',_monospace] min-h-screen">
+        <div className="bg-black/40 text-[#22c55e] font-vt323 min-h-screen">
             <header className="flex items-center justify-between p-4 border-b-2 border-[#f73750] bg-[rgba(0,0,0,0.8)] sticky top-0 z-10">
                 <div className="flex items-center gap-4">
                     <div className="flex gap-1">

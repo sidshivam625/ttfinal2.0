@@ -170,7 +170,7 @@ export default function MissionsPage() {
                                 )}
                             </>
                         ) : (
-                             <div className="text-center text-gray-400 font-mono text-xl p-8 bg-[#2b0f1a]/50 rounded-xl border border-[#7a2f49]">All missions complete, Operative. Well done.</div>
+                             <div className="text-center text-gray-400 font-vt323 text-xl p-8 bg-[#2b0f1a]/50 rounded-xl border border-[#7a2f49]">All missions complete, Operative. Well done.</div>
                         )}
                     </div>
 

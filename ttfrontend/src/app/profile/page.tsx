@@ -76,7 +76,7 @@ const UserProfileCard: React.FC<{ user: ProfileData & { title: string } }> = ({
         <h1 className="font-vt323 text-4xl sm:text-5xl text-[#ffdcdc]">
           {user.name}
         </h1>{" "}
-        <p className="font-mono text-base text-[#d9bfc6]/80 mt-1">
+        <p className="font-vt323 text-base text-[#d9bfc6]/80 mt-1">
           {user.title}
         </p>{" "}
       </div>{" "}
@@ -130,7 +130,7 @@ const StatItem: React.FC<{
     >
       {value}
     </p>{" "}
-    <p className="font-mono text-sm text-[#d9bfc6]/80 mt-1 uppercase tracking-wider">
+    <p className="font-vt323 text-sm text-[#d9bfc6]/80 mt-1 uppercase tracking-wider">
       {label}
     </p>{" "}
   </div>
@@ -230,7 +230,7 @@ export default function ProfilePage() {
           <h2 className="font-vt323 text-3xl text-center text-[#ffdcdc] mb-2">
             // VERIFICATION REQUIRED
           </h2>
-          <p className="font-mono text-center text-gray-300 mb-6">
+          <p className="font-vt323 text-center text-gray-300 mb-6">
             A verification link has been sent to{" "}
             <strong className="text-yellow-400">{user.email}</strong>. Please
             check your inbox (and spam folder) to continue.
@@ -288,7 +288,7 @@ export default function ProfilePage() {
         </h1>
         <button
           onClick={handleLogout}
-          className="font-mono text-sm text-[#d9bfc6] flex items-center gap-2 px-3 py-1 border border-transparent rounded-md hover:border-[#ef3b57]/50 hover:bg-[#2f1f2b] transition-all"
+          className="font-vt323 text-sm text-[#d9bfc6] flex items-center gap-2 px-3 py-1 border border-transparent rounded-md hover:border-[#ef3b57]/50 hover:bg-[#2f1f2b] transition-all"
         >
           <LogOut size={16} /> Sign Out
         </button>
@@ -328,7 +328,7 @@ export default function ProfilePage() {
         </div>
       </main>
       <footer className="mt-12 pt-6 text-center border-t border-[#ef3b57]/20">
-        <p className="font-mono text-xs text-[#d9bfc6]/50">
+        <p className="font-vt323 text-xs text-[#d9bfc6]/50">
           © {new Date().getFullYear()} CrypticFinds · Be kind, play fair.
         </p>
       </footer>

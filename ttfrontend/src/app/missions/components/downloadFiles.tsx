@@ -15,7 +15,7 @@ export default function IntelFiles({ links }: { links?: string }) {
                 >
                     INTEL.FILES
                 </h1>
-                <p className="font-mono text-sm text-gray-500">No downloadable intel for this target.</p>
+                <p className="font-vt323 text-sm text-gray-500">No downloadable intel for this target.</p>
             </div>
         )
     }
@@ -53,7 +53,7 @@ export default function IntelFiles({ links }: { links?: string }) {
                     rel="noopener noreferrer"
                     className="flex items-center justify-between px-4 py-2 bg-[#522546]/50 border border-[#89304E] rounded-md text-gray-300 hover:bg-[#89304E] hover:text-white transition-colors group"
                 >
-                    <span className="font-mono text-sm truncate">{getFileName(url)}</span>
+                    <span className="font-vt323 text-sm truncate">{getFileName(url)}</span>
                     <Download size={18} className="text-gray-400 group-hover:text-white transition-colors" />
                 </a>
             ))}
