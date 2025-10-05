@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useAuth } from "../../context/AuthContext"; // Make sure this path is correct
-import Background from "@/utils/Background";
 import GlitchText from "@/utils/GlitchText";
 import { Loader2 } from "lucide-react";
 import { Loader } from "@/utils/Loader";
@@ -45,7 +44,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Background />
+
 
       <main className="flex-grow relative font-vt323">
         {/* Hero Section */}

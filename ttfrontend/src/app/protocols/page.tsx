@@ -1,5 +1,4 @@
 import React from 'react';
-import Background from '../../utils/Background';
 
 // Using Tailwind CSS for styling instead of an embedded style tag.
 // The layout is now a standard vertical scrolling page.
@@ -8,11 +7,10 @@ const ProtocolCard = () => {
     return (
 
         <div className="border bg-black/70 rounded-xl border-[#522546] w-full max-w-4xl">
-            <Background/>
+
             <div className=" text-white p-3 flex items-center justify-center gap-2 font-bold text-lg">
-                <span>//</span>
-                <span className='font-press-start-2p'>OPERATION_PROTOCOLS.md</span>
-                <span>//</span>
+              
+                <span className='font-press-start-2p'>// OPERATION_PROTOCOLS.md // </span>
             </div>
             <div className="p-8 space-y-6">
                 <div>

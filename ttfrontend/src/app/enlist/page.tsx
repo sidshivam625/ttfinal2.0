@@ -6,7 +6,6 @@ import { useAuth } from '../../../context/AuthContext';
 import { httpsCallable } from 'firebase/functions';
 import { functions, auth } from '../../../lib/firebaseClient';
 import { signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import Background from '../../utils/Background'; // Assuming this component exists
 import { Loader } from '@/utils/Loader';
 
 // --- TYPE DEFINITIONS ---
@@ -168,7 +167,6 @@ export default function AuthPage() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-4 ">
-        <Background />
         <Card> {renderStep()} </Card>
         {error && <p className="w-full max-w-md mt-4 text-center text-sm text-red-400 bg-red-900/50 p-3 rounded-lg">{error}</p>}
         <div className="mt-6 text-center text-gray-400 text-xs font-press-start-2p">

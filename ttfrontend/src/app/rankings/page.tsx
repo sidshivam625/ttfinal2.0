@@ -126,7 +126,7 @@ export default function LeaderboardPage() {
   
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-[#1b1b1b] flex items-center justify-center">
+      <div className="min-h-screen bg-[#1b1b1b]/50 flex items-center justify-center">
 
         <div className="text-center z-10">
           <Loader/>
@@ -149,7 +149,7 @@ export default function LeaderboardPage() {
   const chartData = transformDataForChart(topTenHistory);
 
   return (
-    <div className="min-h-screen  text-white">
+    <div className="min-h-screen bg-black/40 text-white">
 
       <div className="relative z-10 p-4 sm:p-8 lg:p-12 max-w-7xl mx-auto">
         <header className="flex items-center gap-4 pb-8 mb-8">

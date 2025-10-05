@@ -18,7 +18,6 @@ import {
   Loader2,
   MailWarning,
 } from "lucide-react";
-import Background from "../../utils/Background"; // Assuming this component exists
 import { Loader } from "@/utils/Loader";
 
 // --- TYPE DEFINITIONS ---
@@ -214,7 +213,7 @@ export default function ProfilePage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-900/50 flex items-center justify-center">
         <Loader />
       </div>
     );
@@ -223,23 +222,23 @@ export default function ProfilePage() {
   // --- NEW: EMAIL VERIFICATION GATE ---
   if (user && !user.emailVerified) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#1b1b1b]">
-        <Background />
-        <div className="w-full max-w-lg bg-[#2b0f1a]/50 p-8 rounded-xl border border-[#7a2f49] shadow-lg text-center z-10">
-          <MailWarning className="mx-auto text-yellow-400 mb-4" size={48} />
+      <main className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-lg p-8 bg-black/40 rounded-xl border border-[#7a2f49] shadow-lg text-center z-10">
+          <MailWarning className="mx-auto text-[#ef3b57] mb-4" size={48} />
           <h2 className="font-vt323 text-3xl text-center text-[#ffdcdc] mb-2">
             // VERIFICATION REQUIRED
           </h2>
-          <p className="font-vt323 text-center text-gray-300 mb-6">
+          <p className="font-vt323 text-center m-4 text-gray-300 mb-6">
             A verification link has been sent to{" "}
-            <strong className="text-yellow-400">{user.email}</strong>. Please
-            check your inbox (and spam folder) to continue.
+            <strong className="text-[#ef3b57]">{user.email}</strong>. Please
+            check your inbox. It'll be there in the spam folder most likely (for some reason 😒).
           </p>
+          <button className="inline-block mx-auto max-w-xs px-6 py-3 bg-transparent border border-[#ef3b57] text-[#ef3b57] font-vt323 rounded hover:bg-[#ef3b57]/20 hover:scale-105 hover:shadow-lg transition-all duration-300 uppercase" onClick={handleLogout}>Logout</button>
           <div className="flex flex-col sm:flex-row gap-4">
             <button
               onClick={handleResendVerification}
               disabled={verificationSent}
-              className="w-full px-4 py-3 font-vt323 uppercase tracking-wider text-lg text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-300"
+              className="w-full px-4 py-3 font-vt323 uppercase tracking-wider text-lg text-white bg-[#ef3b57] rounded-lg hover:bg-[#ed2947] disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-300"
             >
               {verificationSent ? "SENT!" : "RESEND EMAIL"}
             </button>
@@ -280,8 +279,7 @@ export default function ProfilePage() {
   const displayUser = { ...profile, title: "Elite Hacker" };
 
   return (
-    <div className="min-h-screen bg-[#1b1b1b] p-4 sm:p-8 lg:p-12">
-      <Background />
+    <div className="min-h-screen bg-[#1b1b1b]/60 p-4 sm:p-8 lg:p-12">
       <header className="flex justify-between items-center pb-8 border-b border-[#ef3b57]/20 mb-8">
         <h1 className="font-vt323 text-3xl text-[#ef3b57] tracking-widest">
           USER_PROFILE

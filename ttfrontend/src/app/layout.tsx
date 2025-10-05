@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { AuthProvider } from '../../context/AuthContext';
 import Navbar from '@/utils/Navbar';
 import { VT323,Press_Start_2P } from 'next/font/google';
+import Background from '@/utils/Background';
 
 export const metadata: Metadata = {
   title: 'Cryptic Finds 2025',
@@ -22,6 +23,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${vt323.variable} ${press_start_2p.variable}`}>
         <AuthProvider>
+          <Background/>
         <Navbar/>
           {children}
           </AuthProvider>
