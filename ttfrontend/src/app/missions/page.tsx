@@ -165,6 +165,9 @@ export default function MissionsPage() {
                                         { label: `${currentChallenge.points || 0} PTS`, color: '#FFDDC7', border: '#89304E', bg: '#522546' }
                                     ]}
                                     briefingLabel="CLASSIFIED.BRIEFING"
+                                    customContent={currentChallenge?.isCustom ? (
+                                      <QRPuzzle challengeId={currentChallenge.challengeId || currentChallenge.id} />
+                                    ) : null}
                                 />
                                 {statuses[currentIdx] !== 'done' && (
                                     <Terminal onSubmit={validateFlag} />
@@ -185,9 +188,6 @@ export default function MissionsPage() {
                             onCellClick={setCurrentIdx}
                             activeIndex={currentIdx}
                             title="GRID.STATUS"
-                            extraContent={currentChallenge?.isCustom ? (
-                              <QRPuzzle challengeId={currentChallenge.challengeId || currentChallenge.id} />
-                            ) : null}
                         />
                         {currentChallenge && <IntelFiles links={currentChallenge.links} />}
                     </div>
