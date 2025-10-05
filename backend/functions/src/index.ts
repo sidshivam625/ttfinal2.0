@@ -54,23 +54,17 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
-
-// --- TYPE DEFINITIONS ---
-// Define the shape of data for clarity and type safety
-
-// Structure of a record in your delegates.csv file
+//
+// Types
+//
 interface DelegateRecord {
   delegateId: string;
   phone: string;
 }
-
-// Structure of the data payload sent from the frontend for verification
 interface VerifyDelegatePayload {
   delegateId: string;
   phoneNumber: string;
 }
-
-// Structure of the data payload for account creation
 interface CreateAccountPayload {
   delegateId: string;
   email: string;
@@ -79,12 +73,9 @@ interface CreateAccountPayload {
   phone: string;
 }
 
-// ... verifyDelegate and createAccount functions are unchanged ...
-/**
- * 1. VERIFY DELEGATE
- * Reads the local delegates.csv file to find a matching delegate, then
- * checks Firestore to ensure they have not already registered.
- */
+//
+// 1) VERIFY DELEGATE (no name prefill)
+//
 export const verifyDelegate = functions.region('asia-south1').https.onCall(async (data: VerifyDelegatePayload, _context: functions.https.CallableContext) => {
   const {delegateId, phoneNumber} = data;
   if (!delegateId || !phoneNumber) {
@@ -130,26 +121,54 @@ export const verifyDelegate = functions.region('asia-south1').https.onCall(async
     success: true,
     message: "Delegate verified successfully.",
     delegate: {
-      name: "Verified Delegate", // You can add a 'name' column to your CSV to send back a real name
+      name: "", // do not prefill; user will choose a handle
       phone: foundDelegate.phone,
       delegateId: foundDelegate.delegateId,
     },
   };
 });
 
+//
+// 2) CHECK USERNAME AVAILABILITY (case-insensitive)
+//
+export const checkUsernameAvailable = functions.region('asia-south1').https.onCall(async (data: { username: string }, _ctx) => {
+  const raw = String(data?.username || '').trim();
+  if (!raw) throw new functions.https.HttpsError('invalid-argument', 'username is required');
+  const usernameLower = raw.toLowerCase();
 
-/**
- * 2. CREATE ACCOUNT (Updated)
- * Creates a user in Firebase Auth and a corresponding profile in Firestore,
- * using the correct schema with 'username' and 'totalScore'.
- */
+  // Primary: normalized field
+  const q = await db.collection('users').where('usernameLower', '==', usernameLower).limit(1).get();
+  if (!q.empty) return { success: true, available: false };
+
+  // Legacy fallbacks
+  const [q2, q3] = await Promise.all([
+    db.collection('users').where('username', '==', raw).limit(1).get(),
+    db.collection('users').where('name', '==', raw).limit(1).get(),
+  ]);
+  const legacyTaken = !q2.empty || !q3.empty;
+  return { success: true, available: !legacyTaken };
+});
+
+//
+// 3) CREATE ACCOUNT (enforce unique username, store usernameLower)
+//
 export const createAccount = functions.region('asia-south1').https.onCall(async (data: CreateAccountPayload, _context: functions.https.CallableContext) => {
   const {delegateId, email, password, name, phone} = data;
   try {
+    const trimmedName = String(name || '').trim();
+    if (!trimmedName) {
+      throw new functions.https.HttpsError('invalid-argument', 'Username is required.');
+    }
+    const usernameLower = trimmedName.toLowerCase();
+    const existing = await db.collection('users').where('usernameLower', '==', usernameLower).limit(1).get();
+    if (!existing.empty) {
+      throw new functions.https.HttpsError('already-exists', 'This username is already taken.');
+    }
+
     const userRecord = await admin.auth().createUser({
       email,
       password,
-      displayName: name,
+      displayName: trimmedName,
       emailVerified: false,
     });
 
@@ -170,18 +189,18 @@ export const createAccount = functions.region('asia-south1').https.onCall(async 
     await db.collection("users").doc(userRecord.uid).set({
       uid: userRecord.uid,
       delegateId,
-      username: name, // Use 'username' to match the schema
+      username: trimmedName,
+      usernameLower,
       email,
       phone,
-      totalScore: 0, // Use 'totalScore' to match the schema
+      totalScore: 0,
       solved_logs,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(), // Add creation timestamp
-      optionalField: "", // Add optional field from schema
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Create custom flags for challenges with isCustom = true
+    // Create custom flags for challenges with isCustom = true (non-blocking in case of failure)
     console.log('[createAccount] Starting custom flag generation', { uid: userRecord.uid, delegateId });
-    await createCustomFlagsForUser(userRecord.uid, delegateId);
+    await createCustomFlagsForUser(userRecord.uid, delegateId).catch((e) => console.warn('createCustomFlagsForUser (ignored):', e?.message || e));
     console.log('[createAccount] Finished custom flag generation', { uid: userRecord.uid });
 
     return {success: true, uid: userRecord.uid};
@@ -192,19 +211,17 @@ export const createAccount = functions.region('asia-south1').https.onCall(async 
           "This email address is already in use.",
       );
     }
+    if (error instanceof functions.https.HttpsError) throw error;
     throw new functions.https.HttpsError(
         "internal",
-        "An unexpected error occurred during account creation.",
+        error?.message || "An unexpected error occurred during account creation.",
     );
   }
 });
 
-
-/**
- * 3. GET USER PROFILE (Updated with Fallbacks)
- * Securely fetches the profile for the authenticated user and handles both
- * old and new data schemas gracefully.
- */
+//
+// 4) GET USER PROFILE (legacy-compatible)
+//
 export const getUserProfile = functions.region('asia-south1').https.onCall(async (data: unknown, context: functions.https.CallableContext) => {
   if (!context.auth) {
     throw new functions.https.HttpsError(
@@ -223,30 +240,45 @@ export const getUserProfile = functions.region('asia-south1').https.onCall(async
     );
   }
   const userData = userDoc.data() as admin.firestore.DocumentData;
-  const solvedLogs: {actualScore: number}[] = userData.solved_logs || [];
-  const solvedQuestionsCount = solvedLogs
-      .filter((log) => log.actualScore > 0).length;
+  const solvedLogs: {actualScore: number}[] = Array.isArray(userData?.solved_logs) ? userData.solved_logs : [];
+  const solvedQuestionsCount = solvedLogs.filter((log) => Number(log?.actualScore || 0) > 0).length;
 
-  // Map your new schema fields with fallbacks for old data
   return {
     success: true,
     profile: {
-      // Use 'username' if it exists, otherwise fall back to 'name'
       name: userData.username || userData.name || "N/A",
       email: userData.email,
       delegateId: userData.delegateId,
       phone: userData.phone,
-      // Use 'totalScore' if it exists, otherwise fall back to 'totalPoints', then to 0
-      points: userData.totalScore ?? userData.totalPoints ?? 0,
+      points: Number(userData.totalScore ?? userData.totalPoints ?? 0),
       solvedQuestions: solvedQuestionsCount,
-      unsolvedQuestions: solvedLogs.length - solvedQuestionsCount,
+      unsolvedQuestions: Math.max(0, solvedLogs.length - solvedQuestionsCount),
     },
   };
 });
 
-// --- Missions progress / admin submit handlers (adapted from techtatva-site) ---
-// saveProfile removed per user request — createAccount now writes the solved_logs scaffold at account creation.
+//
+// 5) GET USER RANK (global rank)
+//
+export const getUserRank = functions.region('asia-south1').https.onCall(async (_data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  const uid = context.auth.uid;
 
+  const meDoc = await db.collection('users').doc(uid).get();
+  if (!meDoc.exists) throw new functions.https.HttpsError('not-found', 'Profile not found');
+
+  const myScore = Number(meDoc.data()?.totalScore || 0);
+
+  // Rank = 1 + number of users with strictly higher score
+  const higherSnap = await db.collection('users').where('totalScore', '>', myScore).get();
+  const rank = higherSnap.size + 1;
+
+  return { success: true, rank };
+});
+
+//
+// Missions progress / admin submit handlers (adapted)
+//
 export const missionsProgress = functions.region('asia-south1').https.onRequest(async (req, res) => {
   cors(req, res, async () => {
     try {
@@ -320,24 +352,21 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
       const challengeRefTop = db.collection('challenges').doc(challengeId)
       const challengeSnapTop = await challengeRefTop.get()
       const challengeDataTop = challengeSnapTop.exists ? challengeSnapTop.data() : {}
-
       const submitted = String(flag ?? '').trim()
       let isCorrect = false
 
-      if (challengeDataTop?.isCustom && uid) {
+      if ((challengeDataTop as any)?.isCustom && uid) {
         // Handle custom flag validation
-        const collectionName = `customFlagChallenge${challengeId.replace('challenge', '')}`;
+        const collectionName = `customFlagChallenge${String(challengeId).replace('challenge', '')}`;
         const customFlagsSnap = await db.collection(collectionName)
           .where('userId', '==', uid)
           .where('challengeId', '==', challengeId)
           .limit(1)
           .get()
-        
         if (!customFlagsSnap.empty) {
           const customFlagData = customFlagsSnap.docs[0].data()
-          isCorrect = submitted === customFlagData.flagData.originalFlag
+          isCorrect = submitted === (customFlagData as any).flagData.originalFlag
           if (isCorrect) {
-            // Mark custom flag as used
             await customFlagsSnap.docs[0].ref.update({ isUsed: true })
           }
         } else {
@@ -430,7 +459,7 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
               const { points, free, unlimited, penaltyPer } = await loadChallengeConfig(tx, cid)
               const attemptsBefore = 0
               const attempts = 1
-              const extraAttempts = unlimited ? 0 : Math.max(0, attemptsBefore - free) // exclude the correct attempt
+              const extraAttempts = unlimited ? 0 : Math.max(0, attemptsBefore - free)
               const penalty = extraAttempts * penaltyPer
               const actualScore = points - penalty
 
@@ -588,11 +617,10 @@ async function generateDistortedQRCode(flag: string): Promise<{ distortedQR: str
 
     // 4) Assemble final SVG with background black and quadrant groups
     const svgParts: string[] = [];
-    svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`);
+    svgParts.push(`<svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`);
     svgParts.push(`<rect width="100%" height="100%" fill="#000"/>`);
 
     // Swap positions of 1 and 4 and rotate both 180° around center
-    // Q4 -> top-left rotated; Q2 -> top-right unchanged; Q3 -> bottom-left unchanged; Q1 -> bottom-right rotated
     svgParts.push(`<g id="Q4_to_TL" transform="rotate(180, ${half}, ${half})">${q4.join('\n')}</g>`);
     svgParts.push(`<g id="Q2_stay">${q2.join('\n')}</g>`);
     svgParts.push(`<g id="Q3_stay">${q3.join('\n')}</g>`);
@@ -613,7 +641,6 @@ function generateCustomFlag(userId: string, challengeId: string): string {
   const crypto = require('crypto');
   const seed = `${userId}_${challengeId}_qr_puzzle`;
   const hash = crypto.createHash('sha256').update(seed).digest('hex');
-  
   // Take first 12 characters for a shorter flag
   const flagContent = hash.substring(0, 12);
   return `ctf{${flagContent}}`;
@@ -633,7 +660,6 @@ function encryptFlag(flag: string): string {
 async function createCustomFlagsForUser(userId: string, delegateId: string) {
   try {
     console.log('[createCustomFlagsForUser] Fetching isCustom challenges for user', { userId, delegateId });
-    // Get all challenges with isCustom = true
     const challengesSnap = await db.collection('challenges')
       .where('isCustom', '==', true)
       .get();
@@ -643,16 +669,12 @@ async function createCustomFlagsForUser(userId: string, delegateId: string) {
     
     for (const doc of challengesSnap.docs) {
       const challengeData = doc.data();
-      const challengeId = challengeData.challengeId || doc.id;
+      const challengeId = (challengeData as any).challengeId || doc.id;
       console.log('[createCustomFlagsForUser] Processing challenge', { challengeId, docId: doc.id });
       
-      // Generate a unique custom flag for this user-challenge combination
       const customFlag = generateCustomFlag(userId, challengeId);
-      
-      // Generate distorted QR code
       const qrData = await generateDistortedQRCode(customFlag);
       
-      // Create custom flag document
       const customFlagDoc = {
         userId: userId,
         delegateId: delegateId,
@@ -666,8 +688,7 @@ async function createCustomFlagsForUser(userId: string, delegateId: string) {
         isUsed: false
       };
       
-      // Use separate collections for different challenges
-      const collectionName = `customFlagChallenge${challengeId.replace('challenge', '')}`;
+      const collectionName = `customFlagChallenge${String(challengeId).replace('challenge', '')}`;
       console.log('[createCustomFlagsForUser] Writing custom flag doc', { collectionName, userId, challengeId });
       customFlagPromises.push(
         db.collection(collectionName).add(customFlagDoc)
@@ -697,7 +718,7 @@ export const getUserQRCodes = functions.region('asia-south1').https.onCall(async
 
   try {
     console.log('[getUserQRCodes] Fetching QR for user', { uid, challengeId });
-    const collectionName = `customFlagChallenge${challengeId.replace('challenge', '')}`;
+    const collectionName = `customFlagChallenge${String(challengeId).replace('challenge', '')}`;
     const customFlagsSnap = await db.collection(collectionName)
       .where('userId', '==', uid)
       .where('challengeId', '==', challengeId)
@@ -712,8 +733,8 @@ export const getUserQRCodes = functions.region('asia-south1').https.onCall(async
     console.log('[getUserQRCodes] Found custom flag doc', { docId: customFlagsSnap.docs[0].id, collectionName });
     
     return {
-      distortedQR: customFlagData.flagData.qrImages.distortedQR,
-      type: customFlagData.flagData.qrImages.distortedQRType || 'svg',
+      distortedQR: (customFlagData as any).flagData.qrImages.distortedQR,
+      type: (customFlagData as any).flagData.qrImages.distortedQRType || 'svg',
       challengeId: challengeId
     };
   } catch (error) {
@@ -722,28 +743,28 @@ export const getUserQRCodes = functions.region('asia-south1').https.onCall(async
   }
 });
 
-
-export const leaderboard = functions.region("asia-south1").https.onCall(async (data, context) => {
-  // No auth check needed for a public leaderboard
-  const limit = 50; // Or get from `data` if you want to pass it from client
-
+//
+// Leaderboards
+//
+export const leaderboard = functions.region("asia-south1").https.onCall(async () => {
+  const limit = 50;
   const usersSnap = await db.collection('users')
     .orderBy('totalScore', 'desc')
     .limit(limit)
     .get();
 
-  const results: Array<{ uid: string; username: string; totalScore: number; solvedCount: number; delegateId?: string }>= [];
+  const results: Array<{ rank: number; uid: string; username: string; totalScore: number; solvedCount: number; delegateId?: string }>= [];
+  let rank = 1;
   usersSnap.forEach((doc) => {
     const d = doc.data() as any;
     const username = d.username || d.name || 'Anonymous';
     const totalScore = Number(d.totalScore ?? 0);
     const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
     const solvedCount = solvedLogs.filter((e) => Number(e?.actualScore || 0) > 0).length;
-    results.push({ uid: doc.id, username, totalScore, solvedCount, delegateId: d.delegateId });
+    results.push({ rank: rank++, uid: doc.id, username, totalScore, solvedCount, delegateId: d.delegateId });
   });
 
-  const withRank = results.map((r, idx) => ({ rank: idx + 1, ...r }));
-  return { success: true, leaderboard: withRank };
+  return { success: true, leaderboard: results };
 });
 
 export const getLeaderboardWithHistory = functions.region("asia-south1").https.onCall(async (data, context) => {

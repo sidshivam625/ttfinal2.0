@@ -47,24 +47,35 @@ const VerifyDelegateForm = ({ onSubmit, loading }: { onSubmit: (delegateId: stri
   </form>;
 };
 
-const RegisterForm = ({ onSubmit, loading, prefilled }: { onSubmit: (name: string, email: string, password: string) => void, loading: boolean, prefilled: VerifiedDelegate }) => {
-   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+const RegisterForm = (
+  { onSubmit, loading, prefilled, checkName }:
+  { onSubmit: (name: string, email: string, password: string) => void; loading: boolean; prefilled: VerifiedDelegate; checkName: (name: string) => Promise<void> }
+) => {
+  const [nameError, setNameError] = useState<string | null>(null);
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    onSubmit(
-      formData.get('name') as string,
-      formData.get('email') as string,
-      formData.get('password') as string
-    );
+    const name = (formData.get('name') as string || '').trim();
+    if (!name) { setNameError('Username is required'); return; }
+    if (nameError) return;
+    onSubmit(name, formData.get('email') as string, formData.get('password') as string);
   };
-  return <form onSubmit={handleSubmit}>
-    <h2 className="font-vt323 text-3xl text-center text-[#ffdcdc] mb-2">// CREATE ACCOUNT</h2>
-    <p className="font-mono text-center text-gray-400 mb-8">STEP 02: WELCOME, OPERATIVE</p>
-    <Input name="name" placeholder="Your Name / Handle" required defaultValue={prefilled.name} />
-    <Input name="email" placeholder="Email Address" type="email" required />
-    <Input name="password" placeholder="Password (min. 6 characters)" type="password" required minLength={6} />
-    <Button loading={loading}>Enlist</Button>
-  </form>;
+  const onNameBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
+    const name = (e.currentTarget.value || '').trim();
+    if (!name) { setNameError('Username is required'); return; }
+    try { await checkName(name); setNameError(null); } catch (err: any) { setNameError(err?.message || 'Username not available'); }
+  };
+  return (
+    <form onSubmit={handleSubmit}>
+      <h2 className="font-vt323 text-3xl text-center text-[#ffdcdc] mb-2">// CREATE ACCOUNT</h2>
+      <p className="font-mono text-center text-gray-400 mb-8">STEP 02: WELCOME, OPERATIVE</p>
+      <Input name="name" placeholder="Choose a unique username" required defaultValue={prefilled.name} onBlur={onNameBlur} />
+      {nameError && <p className="text-sm text-red-400 -mt-3 mb-3">{nameError}</p>}
+      <Input name="email" placeholder="Email Address" type="email" required />
+      <Input name="password" placeholder="Password (min. 6 characters)" type="password" required minLength={6} />
+      <Button loading={loading}>Enlist</Button>
+    </form>
+  );
 };
 
 const LoginForm = ({ onSubmit, loading }: { onSubmit: (email: string, password: string) => void, loading: boolean }) => {
@@ -110,6 +121,14 @@ export default function AuthPage() {
     } finally { setLoading(false); }
   };
 
+  // Check username availability using backend callable
+  const checkName = async (name: string) => {
+    const fn = httpsCallable(functions, 'checkUsernameAvailable');
+    const res = await fn({ username: name });
+    const data = res.data as { success: boolean; available: boolean };
+    if (!data?.success || !data.available) throw new Error('Username already taken');
+  };
+
   const handleRegister = async (name: string, email: string, password: string) => {
     if (!verifiedData) return setError("Verification data is missing.");
     setLoading(true); setError(null);
@@ -122,6 +141,8 @@ export default function AuthPage() {
       if (auth.currentUser) {
         await sendEmailVerification(auth.currentUser);
       }
+      // Navigate to profile; it will auto-refresh when verification is complete
+      router.push('/profile');
     } catch (err: any) { setError(err.message);
     } finally { setLoading(false); }
   };
@@ -138,7 +159,7 @@ export default function AuthPage() {
   const renderStep = () => {
     switch(step) {
       case 'verify': return <VerifyDelegateForm onSubmit={handleVerify} loading={loading} />;
-      case 'register': return <RegisterForm onSubmit={handleRegister} loading={loading} prefilled={verifiedData!} />;
+      case 'register': return <RegisterForm onSubmit={handleRegister} loading={loading} prefilled={verifiedData!} checkName={checkName} />;
       case 'login': default: return <LoginForm onSubmit={handleLogin} loading={loading} />;
     }
   };

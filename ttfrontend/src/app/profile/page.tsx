@@ -12,6 +12,7 @@ import Background from '../../utils/Background'; // Assuming this component exis
 // --- TYPE DEFINITIONS ---
 interface ProfileData { name: string; email: string; delegateId: string; phone: string; points: number; solvedQuestions: number; unsolvedQuestions: number; }
 interface GetProfileResponse { success: true; profile: ProfileData; }
+interface GetRankResponse { success: boolean; rank: number; }
 
 // --- UI COMPONENTS ---
 const CARD_HOVER_EFFECT = 'transition-all duration-300 transform hover:-translate-y-1 hover:shadow-[0_0_24px_rgba(239,59,87,0.3),_0_0_8px_rgba(239,59,87,0.2)]';
@@ -27,6 +28,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [verificationSent, setVerificationSent] = useState(false);
+  const [rank, setRank] = useState<number>(0);
 
   useEffect(() => {
     if (!authLoading) {
@@ -38,6 +40,12 @@ export default function ProfilePage() {
             const getUserProfile = httpsCallable<void, GetProfileResponse>(functions, 'getUserProfile');
             const result = await getUserProfile();
             if (result.data.success) { setProfile(result.data.profile); }
+            // Try to fetch rank (works even if not verified)
+            try {
+              const getUserRank = httpsCallable<void, GetRankResponse>(functions, 'getUserRank');
+              const r = await getUserRank();
+              if (r.data?.success) setRank(r.data.rank);
+            } catch {}
           } catch (err: any) { setError(err.message);
           } finally { setLoading(false); }
         };
@@ -47,6 +55,21 @@ export default function ProfilePage() {
       }
     }
   }, [user, authLoading, router]);
+
+  // Poll for email verification every 5s when unverified
+  useEffect(() => {
+    if (user && !user.emailVerified) {
+      const id = setInterval(async () => {
+        try {
+          await user.reload();
+          if (auth.currentUser?.emailVerified) {
+            router.refresh();
+          }
+        } catch {}
+      }, 5000);
+      return () => clearInterval(id);
+    }
+  }, [user, router]);
 
   const handleLogout = async () => await signOut(auth);
   const handleResendVerification = async () => {
@@ -96,7 +119,7 @@ export default function ProfilePage() {
      </div>;
   }
   
-  const displayStats = { rank: 12, totalPoints: profile.points, challengesSolved: profile.solvedQuestions, challengesAttempted: profile.solvedQuestions + profile.unsolvedQuestions };
+  const displayStats = { rank: rank || 0, totalPoints: profile.points, challengesSolved: profile.solvedQuestions, challengesAttempted: profile.solvedQuestions + profile.unsolvedQuestions };
   const displayUser = { ...profile, title: "Elite Hacker" };
 
   return (
