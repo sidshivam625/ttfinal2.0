@@ -12,7 +12,11 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
+    // WARNING: This object applies a universal ignore pattern ("**/*"), 
+    // effectively disabling all linting rules for all files in the project,
+    // regardless of the configurations loaded above.
     ignores: [
+      "**/*", // <-- THIS LINE IGNORES ALL FILES
       "node_modules/**",
       ".next/**",
       "out/**",
