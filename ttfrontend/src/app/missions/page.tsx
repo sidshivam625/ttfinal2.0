@@ -3,6 +3,7 @@ import QuestionGrid from "./components/question_grid";
 import CTFCard from "./components/question_box";
 import Terminal from "./components/terminal";
 import IntelFiles from "./components/downloadFiles";
+import QRPuzzle from "./components/qr_puzzle";
 import { auth, db } from "../../../lib/firebaseClient";
 import { collection, getDocs } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -165,6 +166,9 @@ export default function MissionsPage() {
                                         { label: `${currentChallenge.points || 0} PTS`, color: '#FFDDC7', border: '#89304E', bg: '#522546' }
                                     ]}
                                     briefingLabel="CLASSIFIED.BRIEFING"
+                                    customContent={currentChallenge?.isCustom ? (
+                                      <QRPuzzle challengeId={currentChallenge.challengeId || currentChallenge.id} />
+                                    ) : null}
                                 />
                                 {statuses[currentIdx] !== 'done' && (
                                     <Terminal onSubmit={validateFlag} />

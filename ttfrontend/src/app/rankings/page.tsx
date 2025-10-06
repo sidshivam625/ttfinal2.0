@@ -1,16 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from "react";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-} from "recharts";
+import { Line } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip as ChartTooltip, Legend as ChartLegend } from 'chart.js';
+
 import { useAuth } from "../../../context/AuthContext";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
@@ -19,6 +12,9 @@ import { Loader2, BarChart2 } from "lucide-react";
 import { Loader } from "@/utils/Loader";
 import CTFButton from "@/utils/CTFButton";
 import Link from "next/link";
+
+// Register Chart.js components
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ChartTooltip, ChartLegend);
 
 // --- TYPE DEFINITIONS ---
 // For the chart (Top 10 with detailed history)
@@ -50,23 +46,36 @@ interface FullLeaderboardResponse {
 }
 
 
-// --- DATA TRANSFORMATION FOR RECHARTS ---
-function transformDataForChart(players: PlayerHistory[]) {
-  if (!players || players.length === 0) return [];
+// --- DATA TRANSFORMATION FOR CHART.JS ---
+function buildChartJsData(players: PlayerHistory[]) {
+  if (!players || players.length === 0) {
+    return { labels: [] as string[], datasets: [] as any[] };
+  }
 
   const allTimePoints = new Set<number>();
   players.forEach(p => p.pointsOverTime.forEach(pt => allTimePoints.add(pt.time)));
-
   const sortedTimes = Array.from(allTimePoints).sort((a, b) => a - b);
 
-  return sortedTimes.map(time => {
-    const row: { time: number; [key: string]: number } = { time };
-    players.forEach(p => {
-      const relevantPoints = p.pointsOverTime.filter(pt => pt.time <= time);
-      row[p.username] = relevantPoints.length > 0 ? relevantPoints[relevantPoints.length - 1].score : 0;
+  const labels = sortedTimes.map(t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+
+  const datasets = players.map((p, index) => {
+    const data = sortedTimes.map(time => {
+      const relevant = p.pointsOverTime.filter(pt => pt.time <= time);
+      return relevant.length > 0 ? relevant[relevant.length - 1].score : 0;
     });
-    return row;
+    return {
+      label: p.username,
+      data,
+      borderColor: PALETTE[index % PALETTE.length],
+      backgroundColor: PALETTE[index % PALETTE.length],
+      borderWidth: 2,
+      tension: 0.3,
+      pointRadius: 0,
+      pointHitRadius: 10,
+    };
   });
+
+  return { labels, datasets };
 }
 
 const PALETTE = [ "#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e", "#10b981", "#06b6d4", "#3b82f6", "#8b5cf6", "#d946ef" ];
@@ -91,28 +100,22 @@ export default function LeaderboardPage() {
       } else {
         const fetchAllLeaderboardData = async () => {
           try {
-            // Create callable functions for both endpoints
             const getFullLeaderboard = httpsCallable<void, FullLeaderboardResponse>(functions, 'leaderboard');
             const getHistoryLeaderboard = httpsCallable<void, LeaderboardHistoryResponse>(functions, 'getLeaderboardWithHistory');
-
-            // Fetch both data sets in parallel for efficiency
             const [fullResult, historyResult] = await Promise.all([
               getFullLeaderboard(),
               getHistoryLeaderboard()
             ]);
-
             if (fullResult.data.success) {
               setFullLeaderboard(fullResult.data.leaderboard);
             } else {
-               setError("Failed to fetch full leaderboard data.");
+              setError("Failed to fetch full leaderboard data.");
             }
-
             if (historyResult.data.success) {
               setTopTenHistory(historyResult.data.leaderboard);
             } else {
-               setError("Failed to fetch chart data.");
+              setError("Failed to fetch chart data.");
             }
-
           } catch (err: any) {
             setError(err.message || "An error occurred fetching leaderboard data.");
           } finally {
@@ -123,11 +126,15 @@ export default function LeaderboardPage() {
       }
     }
   }, [user, authLoading, router]);
-  
+
   if (authLoading || loading) {
     return (
+<<<<<<< HEAD
       <div className="min-h-screen bg-[#1b1b1b]/50 flex items-center justify-center">
 
+=======
+      <div className="min-h-screen bg-[#1b1b1b] flex items-center justify-center">
+>>>>>>> siddhant4
         <div className="text-center z-10">
           <Loader/>
           <p className="font-press-start-2p text-lg text-gray-400 mt-4">Deriving Leaderboard Data</p>
@@ -137,20 +144,46 @@ export default function LeaderboardPage() {
   }
 
   if (error) {
-     return <div className="min-h-screen font-press-start-2p flex flex-col items-center justify-center text-[#ef3b57] p-4">
-       <h2 className="text-2xl m-8 font-bold">Error</h2>
-       <p className="mt-2 m-8 text-center">{error}</p>
-       <Link href={"/missions"}>
-       <CTFButton text="Return to Missions"/>
-       </Link>
-     </div>;
+    return (
+      <div className="min-h-screen font-press-start-2p flex flex-col items-center justify-center text-[#ef3b57] p-4">
+        <h2 className="text-2xl m-8 font-bold">Error</h2>
+        <p className="mt-2 m-8 text-center">{error}</p>
+        <Link href={'/missions'}>
+          <CTFButton text="Return to Missions"/>
+        </Link>
+      </div>
+    );
   }
 
-  const chartData = transformDataForChart(topTenHistory);
+  const { labels, datasets } = buildChartJsData(topTenHistory);
+  const chartJsData = { labels, datasets };
+  const chartJsOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { enabled: true },
+    },
+    scales: {
+      x: {
+        grid: { color: '#522546' },
+        ticks: { color: '#d9bfc6', font: { size: 12 } },
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: '#522546' },
+        ticks: { color: '#d9bfc6', font: { size: 12 } },
+      },
+    },
+  } as const;
 
   return (
+<<<<<<< HEAD
     <div className="min-h-screen bg-black/40 text-white">
 
+=======
+    <div className="min-h-screen  text-white">
+>>>>>>> siddhant4
       <div className="relative z-10 p-4 sm:p-8 lg:p-12 max-w-7xl mx-auto">
         <header className="flex items-center gap-4 pb-8 mb-8">
           <BarChart2 size={40} className="text-[#ef3b57]" />
@@ -161,42 +194,10 @@ export default function LeaderboardPage() {
 
         {/* --- CHART AREA (for Top 10) --- */}
         <div className="bg-[#2b0f1a]/50 p-6 rounded-xl border border-[#7a2f49] shadow-lg mb-8">
-            <h3 className="font-vt323 text-2xl text-[#ef3b57] mb-4">// TOP 10 SCORE PROGRESSION</h3>
-            <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={chartData} margin={{ top: 5, right: 30, left: 10, bottom: 20 }}>
-                    <CartesianGrid stroke="#522546" strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="time" 
-                      stroke="#d9bfc6" 
-                      tick={{ fill: '#d9bfc6', fontSize: 12 }} 
-                      tickMargin={10} 
-                      type="number"
-                      domain={['dataMin', 'dataMax']}
-                      tickFormatter={(unixTime) => new Date(unixTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      label={{ value: 'Time of Solve', position: 'insideBottom', offset: -10, fill: '#9ca3af' }}
-                    />
-                    <YAxis stroke="#d9bfc6" tick={{ fill: '#d9bfc6', fontSize: 12 }} />
-                    <Tooltip
-                        contentStyle={{ background: "rgba(13, 13, 13, 0.8)", border: "1px solid #7a2f49", borderRadius: "0.5rem", fontFamily: "monospace" }}
-                        labelStyle={{ color: "#ffdcdc", marginBottom: '10px' }}
-                        itemStyle={{ fontWeight: 'bold' }}
-                        formatter={(value: number) => `${value.toLocaleString()} pts`}
-                        labelFormatter={(label) => `Time: ${new Date(label).toLocaleString()}`}
-                    />
-                    {/* <Legend wrapperStyle={{ fontFamily: 'monospace', fontSize: '12px' }}/> */}
-                    {topTenHistory.map((player, index) => (
-                        <Line
-                            key={player.uid}
-                            type="monotone"
-                            dataKey={player.username}
-                            stroke={PALETTE[index % PALETTE.length]}
-                            strokeWidth={2}
-                            dot={false}
-                            activeDot={{ r: 6 }}
-                        />
-                    ))}
-                </LineChart>
-            </ResponsiveContainer>
+          <h3 className="font-vt323 text-2xl text-[#ef3b57] mb-4">// TOP 10 SCORE PROGRESSION</h3>
+          <div style={{ width: '100%', height: 400 }}>
+            <Line data={chartJsData} options={chartJsOptions} />
+          </div>
         </div>
 
         {/* --- LEADERBOARD TABLE (for All Users) --- */}

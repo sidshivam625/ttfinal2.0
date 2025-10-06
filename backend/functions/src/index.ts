@@ -30,9 +30,36 @@ export const triggerCustomFlags = functions.region('asia-south1').https.onReques
     } catch (e: any) {
       console.error('[triggerCustomFlags] Error', e)
       return res.status(500).json({ success: false, error: e?.message || String(e) })
+    } 
+    
+    
+  })
+}) 
+export const triggerCustom1Flags = functions.region('asia-south1').https.onRequest(async (req, res) => {
+  cors(req, res, async () => {
+    try {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+      const app = initAdmin()
+
+      const authHeader = req.headers.authorization || ''
+      const idToken = authHeader.replace('Bearer ', '')
+      if (!idToken) return res.status(401).json({ error: 'Missing token' })
+      const decoded = await app.auth().verifyIdToken(idToken)
+      const callerUid = (decoded as any).uid
+
+      const { userId, delegateId } = req.body || {}
+      if (!userId || !delegateId) return res.status(400).json({ error: 'Missing userId or delegateId' })
+
+      console.log('[triggerCustom1Flags] Triggered by', { callerUid, targetUser: userId })
+      await createCustom1FlagsForUser(userId, delegateId)
+      return res.status(200).json({ success: true })
+    } catch (e: any) {
+      console.error('[triggerCustom1Flags] Error', e)
+      return res.status(500).json({ success: false, error: e?.message || String(e) })
     }
   })
-})
+}) 
+
 
 function initAdmin(): admin.app.App {
   if (admin.apps.length > 0) return admin.app();
@@ -198,9 +225,10 @@ export const createAccount = functions.region('asia-south1').https.onCall(async 
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Create custom flags for challenges with isCustom = true (non-blocking in case of failure)
+    // Create custom flags for challenges with isCustom / isCustom1 (non-blocking in case of failure)
     console.log('[createAccount] Starting custom flag generation', { uid: userRecord.uid, delegateId });
     await createCustomFlagsForUser(userRecord.uid, delegateId).catch((e) => console.warn('createCustomFlagsForUser (ignored):', e?.message || e));
+    await createCustom1FlagsForUser(userRecord.uid, delegateId).catch((e) => console.warn('createCustom1FlagsForUser (ignored):', e?.message || e));
     console.log('[createAccount] Finished custom flag generation', { uid: userRecord.uid });
 
     return {success: true, uid: userRecord.uid};
@@ -326,7 +354,89 @@ export const missionsProgress = functions.region('asia-south1').https.onRequest(
       return res.status(401).json({ error: 'Unauthorized', details: e?.message || String(e) })
     }
   })
-})
+}) 
+
+export const getUserCustom1Flags = functions.region('asia-south1').https.onCall(async (data: any, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+  const uid = context.auth.uid;
+  const specificChallengeId = typeof data?.challengeId === 'string' && data.challengeId ? String(data.challengeId) : null;
+
+  try {
+    const results: Array<{ challengeId: string; flag: string }> = [];
+
+    if (specificChallengeId) {
+      const collectionName = `custom1challenge${String(specificChallengeId).replace('challenge', '')}`;
+      const snap = await db.collection(collectionName)
+        .where('userId', '==', uid)
+        .where('challengeId', '==', specificChallengeId)
+        .limit(1)
+        .get();
+
+      if (!snap.empty) {
+        const d = snap.docs[0].data() as any;
+        results.push({ challengeId: specificChallengeId, flag: d.flagData?.originalFlag });
+      } else {
+        // Optional: lazy-create if missing
+        const userDoc = await db.collection('users').doc(uid).get();
+        const delegateId = (userDoc.data() as any)?.delegateId || '';
+        const flag = generateCustom1Flag(uid, specificChallengeId);
+        const record = {
+          userId: uid,
+          delegateId,
+          challengeId: specificChallengeId,
+          flagData: { originalFlag: flag, encryptedFlag: encryptFlag(flag) },
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          isUsed: false,
+        };
+        await db.collection(collectionName).add(record);
+        results.push({ challengeId: specificChallengeId, flag });
+      }
+    } else {
+      // Return all isCustom1 challenge flags
+      const challengesSnap = await db.collection('challenges')
+        .where('isCustom1', '==', true)
+        .get();
+
+      for (const doc of challengesSnap.docs) {
+        const c = doc.data() as any;
+        const challengeId = c.challengeId || doc.id;
+        const collectionName = `custom1challenge${String(challengeId).replace('challenge', '')}`;
+        const snap = await db.collection(collectionName)
+          .where('userId', '==', uid)
+          .where('challengeId', '==', challengeId)
+          .limit(1)
+          .get();
+
+        if (!snap.empty) {
+          const d = snap.docs[0].data() as any;
+          results.push({ challengeId, flag: d.flagData?.originalFlag });
+        } else {
+          // Optional lazy-create
+          const userDoc = await db.collection('users').doc(uid).get();
+          const delegateId = (userDoc.data() as any)?.delegateId || '';
+          const flag = generateCustom1Flag(uid, challengeId);
+          const record = {
+            userId: uid,
+            delegateId,
+            challengeId,
+            flagData: { originalFlag: flag, encryptedFlag: encryptFlag(flag) },
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            isUsed: false,
+          };
+          await db.collection(collectionName).add(record);
+          results.push({ challengeId, flag });
+        }
+      }
+    }
+
+    return { success: true, flags: results };
+  } catch (error) {
+    console.error('[getUserCustom1Flags] Error:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to fetch custom1 flags');
+  }
+});
 
 export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(async (req, res) => {
   cors(req, res, async () => {
@@ -371,6 +481,23 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
           }
         } else {
           return res.status(404).json({ success: false, message: 'Custom flag not found for this user.' })
+        }
+      } else if ((challengeDataTop as any)?.isCustom1 && uid) {
+        // Handle custom1 (cookie-based) flag validation
+        const collectionName = `custom1challenge${String(challengeId).replace('challenge', '')}`;
+        const custom1Snap = await db.collection(collectionName)
+          .where('userId', '==', uid)
+          .where('challengeId', '==', challengeId)
+          .limit(1)
+          .get()
+        if (!custom1Snap.empty) {
+          const custom1Data = custom1Snap.docs[0].data()
+          isCorrect = submitted === (custom1Data as any).flagData.originalFlag
+          if (isCorrect) {
+            await custom1Snap.docs[0].ref.update({ isUsed: true })
+          }
+        } else {
+          return res.status(404).json({ success: false, message: 'Custom1 flag not found for this user.' })
         }
       } else {
         // Handle regular flag validation
@@ -646,6 +773,15 @@ function generateCustomFlag(userId: string, challengeId: string): string {
   return `ctf{${flagContent}}`;
 }
 
+// Generate custom1 (cookie-based) flag for user-challenge combination
+function generateCustom1Flag(userId: string, challengeId: string): string {
+  const crypto = require('crypto');
+  const seed = `${userId}_${challengeId}_cookie_puzzle`;
+  const hash = crypto.createHash('sha256').update(seed).digest('hex');
+  const flagContent = hash.substring(0, 12);
+  return `ctf{${flagContent}}`;
+}
+
 // Encrypt flag for storage
 function encryptFlag(flag: string): string {
   const crypto = require('crypto');
@@ -701,7 +837,51 @@ async function createCustomFlagsForUser(userId: string, delegateId: string) {
     console.error('[createCustomFlagsForUser] Error creating custom flags:', error);
     // Don't throw error to prevent account creation failure
   }
+} 
+
+// Create cookie-based custom1 flags for a user
+async function createCustom1FlagsForUser(userId: string, delegateId: string) {
+  try {
+    console.log('[createCustom1FlagsForUser] Fetching isCustom1 challenges for user', { userId, delegateId });
+    const challengesSnap = await db.collection('challenges')
+      .where('isCustom1', '==', true)
+      .get();
+
+    console.log('[createCustom1FlagsForUser] Challenges found', { count: challengesSnap.size });
+    const writes: Promise<any>[] = [];
+
+    for (const doc of challengesSnap.docs) {
+      const data = doc.data() as any;
+      const challengeId = data.challengeId || doc.id;
+      console.log('[createCustom1FlagsForUser] Processing challenge', { challengeId, docId: doc.id });
+
+      const customFlag = generateCustom1Flag(userId, challengeId);
+
+      const record = {
+        userId,
+        delegateId,
+        challengeId,
+        flagData: {
+          originalFlag: customFlag,
+          encryptedFlag: encryptFlag(customFlag),
+        },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        isUsed: false,
+      };
+
+      // Collection naming for cookies, e.g. custom1challenge5
+      const collectionName = `custom1challenge${String(challengeId).replace('challenge', '')}`;
+      writes.push(db.collection(collectionName).add(record));
+    }
+
+    await Promise.all(writes);
+    console.log('[createCustom1FlagsForUser] Created custom1 flags', { created: writes.length, userId });
+  } catch (error) {
+    console.error('[createCustom1FlagsForUser] Error creating custom1 flags:', error);
+  }
 }
+
+
 
 // Get user's custom QR codes
 export const getUserQRCodes = functions.region('asia-south1').https.onCall(async (data: {challengeId: string}, context: functions.https.CallableContext) => {

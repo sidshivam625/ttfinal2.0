@@ -130,7 +130,8 @@ export default function AuthPage() {
 
   const handleRegister = async (name: string, email: string, password: string) => {
     if (!verifiedData) return setError("Verification data is missing.");
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
       const createAccount = httpsCallable(functions, 'createAccount');
       // Pass the user-chosen name to the backend
@@ -140,16 +141,47 @@ export default function AuthPage() {
       if (auth.currentUser) {
         await sendEmailVerification(auth.currentUser);
       }
+      // Fetch all cookie-based flags and set cookies through API route
+      try {
+        const getUserCustom1Flags = httpsCallable(functions, 'getUserCustom1Flags');
+        const resp = await getUserCustom1Flags({});
+        const { flags = [] } = (resp.data as any) || {};
+        await fetch('/api/custom1-cookies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ flags }),
+        });
+      } catch (e) {
+        console.warn('Setting custom1 cookies failed (non-blocking):', e);
+      }
+
       // Navigate to profile; it will auto-refresh when verification is complete
       router.push('/profile');
-    } catch (err: any) { setError(err.message);
-    } finally { setLoading(false); }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogin = async (email: string, password: string) => {
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      // Ensure cookies for isCustom1 flags are set on login as well
+      try {
+        const getUserCustom1Flags = httpsCallable(functions, 'getUserCustom1Flags');
+        const resp = await getUserCustom1Flags({});
+        const { flags = [] } = (resp.data as any) || {};
+        await fetch('/api/custom1-cookies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ flags }),
+        });
+      } catch (e) {
+        console.warn('Setting custom1 cookies failed (non-blocking):', e);
+      }
     } catch (err: any) { setError("Failed to sign in. Please check your credentials.");
     } finally { setLoading(false); }
   };
