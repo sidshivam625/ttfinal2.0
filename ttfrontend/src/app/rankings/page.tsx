@@ -8,7 +8,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../lib/firebaseClient";
-import { Loader2, BarChart2 } from "lucide-react";
+import { BarChart2 } from "lucide-react";
 import { Loader } from "@/utils/Loader";
 import CTFButton from "@/utils/CTFButton";
 import Link from "next/link";
@@ -129,12 +129,8 @@ export default function LeaderboardPage() {
 
   if (authLoading || loading) {
     return (
-<<<<<<< HEAD
       <div className="min-h-screen bg-[#1b1b1b]/50 flex items-center justify-center">
 
-=======
-      <div className="min-h-screen bg-[#1b1b1b] flex items-center justify-center">
->>>>>>> siddhant4
         <div className="text-center z-10">
           <Loader/>
           <p className="font-press-start-2p text-lg text-gray-400 mt-4">Deriving Leaderboard Data</p>
@@ -178,12 +174,8 @@ export default function LeaderboardPage() {
   } as const;
 
   return (
-<<<<<<< HEAD
     <div className="min-h-screen bg-black/40 text-white">
 
-=======
-    <div className="min-h-screen  text-white">
->>>>>>> siddhant4
       <div className="relative z-10 p-4 sm:p-8 lg:p-12 max-w-7xl mx-auto">
         <header className="flex items-center gap-4 pb-8 mb-8">
           <BarChart2 size={40} className="text-[#ef3b57]" />
