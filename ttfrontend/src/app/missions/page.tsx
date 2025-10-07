@@ -4,8 +4,9 @@ import CTFCard from "./components/question_box";
 import Terminal from "./components/terminal";
 import IntelFiles from "./components/downloadFiles";
 import QRPuzzle from "./components/qr_puzzle";
-import { auth, db } from "../../../lib/firebaseClient";
-import { collection, getDocs } from "firebase/firestore";
+import { auth, db, functions } from "../../../lib/firebaseClient";
+import { collection, getDocs, doc, onSnapshot } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { useEffect, useState } from "react";
 import CTFButton from "@/utils/CTFButton";
 import Link from "next/link";
@@ -19,12 +20,25 @@ export default function MissionsPage() {
     const [statuses, setStatuses] = useState<{[key: number]: "active"|"done"|"locked"}>({});
     const [loading, setLoading] = useState(true);
     const [uid, setUid] = useState<string | null>(null);
+    const [hasStarted, setHasStarted] = useState<boolean | null>(null);
+    const [hasEnded, setHasEnded] = useState<boolean | null>(null);
 
     useEffect(() => {
         const unsub = auth.onAuthStateChanged(async (user) => {
             setUid(user ? user.uid : null);
         });
         return () => unsub();
+    }, []);
+
+    // Event gate: listen to event/status in Firestore
+    useEffect(() => {
+        const ref = doc(db, 'event', 'status');
+        const unsubscribe = onSnapshot(ref, (snap) => {
+            const data = (snap.data() as any) || {};
+            setHasStarted(!!data?.hasstarted);
+            setHasEnded(!!data?.hasended);
+        });
+        return () => unsubscribe();
     }, []);
 
     useEffect(() => {
@@ -71,7 +85,42 @@ export default function MissionsPage() {
                         }
                     }
                     setStatuses(st);
-                    if (firstActive >= 0) setCurrentIdx(firstActive);
+                    if (firstActive >= 0) {
+                        setCurrentIdx(firstActive);
+                        // Ensure freeze state reflects current active challenge on load
+                        try {
+                            const activeChallenge = challenges[firstActive];
+                            if (activeChallenge?.isCustom2) {
+                                const alreadyFrozen = typeof window !== 'undefined' && localStorage.getItem('freezeLeaderboardActive') === 'true' && localStorage.getItem('frozenLeaderboard');
+                                if (!alreadyFrozen) {
+                                    const getFullLeaderboard: any = httpsCallable(functions, 'leaderboard');
+                                    const getHistoryLeaderboard: any = httpsCallable(functions, 'getLeaderboardWithHistory');
+                                    const [fullResult, historyResult] = await Promise.all([
+                                        getFullLeaderboard(),
+                                        getHistoryLeaderboard(),
+                                    ]);
+                                    const snapshot = {
+                                        timestamp: Date.now(),
+                                        fullLeaderboard: (fullResult?.data as any)?.leaderboard ?? [],
+                                        topTenHistory: (historyResult?.data as any)?.leaderboard ?? [],
+                                    };
+                                    localStorage.setItem('frozenLeaderboard', JSON.stringify(snapshot));
+                                    localStorage.setItem('freezeLeaderboardActive', 'true');
+                                    if (typeof window !== 'undefined') {
+                                        window.dispatchEvent(new CustomEvent('frozenLeaderboardChange', { detail: { active: true } }));
+                                    }
+                                }
+                            } else {
+                                localStorage.removeItem('frozenLeaderboard');
+                                localStorage.removeItem('freezeLeaderboardActive');
+                                if (typeof window !== 'undefined') {
+                                    window.dispatchEvent(new CustomEvent('frozenLeaderboardChange', { detail: { active: false } }));
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Freeze state initialization failed:', e);
+                        }
+                    }
                 }
             } catch (e) { console.error('Error fetching progress:', e); }
         }
@@ -106,7 +155,36 @@ export default function MissionsPage() {
                     });
                     setStatuses(st);
                     const nextActive = challenges.findIndex((c, i) => st[i] === 'active');
-                    if (nextActive >= 0) setCurrentIdx(nextActive);
+                    if (nextActive >= 0) {
+                        setCurrentIdx(nextActive);
+                        // Freeze leaderboard if the next active challenge is isCustom2
+                        try {
+                            const nextChallenge = challenges[nextActive];
+                            if (nextChallenge?.isCustom2) {
+                                const alreadyFrozen = typeof window !== 'undefined' && localStorage.getItem('freezeLeaderboardActive') === 'true' && localStorage.getItem('frozenLeaderboard');
+                                if (!alreadyFrozen) {
+                                    const getFullLeaderboard: any = httpsCallable(functions, 'leaderboard');
+                                    const getHistoryLeaderboard: any = httpsCallable(functions, 'getLeaderboardWithHistory');
+                                    const [fullResult, historyResult] = await Promise.all([
+                                        getFullLeaderboard(),
+                                        getHistoryLeaderboard(),
+                                    ]);
+                                    const snapshot = {
+                                        timestamp: Date.now(),
+                                        fullLeaderboard: (fullResult?.data as any)?.leaderboard ?? [],
+                                        topTenHistory: (historyResult?.data as any)?.leaderboard ?? [],
+                                    };
+                                    localStorage.setItem('frozenLeaderboard', JSON.stringify(snapshot));
+                                    localStorage.setItem('freezeLeaderboardActive', 'true');
+                                }
+                            } else {
+                                localStorage.removeItem('frozenLeaderboard');
+                                localStorage.removeItem('freezeLeaderboardActive');
+                            }
+                        } catch (e) {
+                            console.warn('Freeze leaderboard snapshot failed:', e);
+                        }
+                    }
                 }
             }
             return { success: data.success, message: data.message };
@@ -115,6 +193,18 @@ export default function MissionsPage() {
             return { success: false, message: "Server error. Please try again." };
         }
     }
+
+    // If event hasn't started or has ended, lock this page
+    if (hasStarted === false || hasEnded === true) return (
+        <main className="min-h-screen text-[#ffdcdc] p-6 flex items-center justify-center">
+            <div className="w-full max-w-2xl bg-[#2b0f1a]/60 p-8 rounded-xl border border-[#7a2f49] shadow-lg text-center">
+                <h2 className="font-press-start-2p text-xl mb-3">{hasEnded ? '// OPERATION COMPLETE' : '// OPERATION LOCKED'}</h2>
+                <p className="font-vt323 text-lg text-[#d9bfc6]">
+                    {hasEnded ? 'The event has ended. Thanks for participating.' : 'The event has not started yet. Stand by for activation.'}
+                </p>
+            </div>
+        </main>
+    );
 
     if (loading) return (
         <main className="min-h-screen text-[#ef3b57] font-press-start-2p p-6 flex items-center justify-center">

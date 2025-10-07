@@ -1,4 +1,5 @@
 "use client";
+import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -15,6 +16,32 @@ export default function Navbar() {
   const pathname = usePathname();
   // Get both user and loading state from the context.
   const { user, loading } = useAuth(); 
+  const [freezeActive, setFreezeActive] = React.useState(false);
+
+  React.useEffect(() => {
+    const check = () => {
+      try {
+        const active = typeof window !== 'undefined' && localStorage.getItem('freezeLeaderboardActive') === 'true' && !!localStorage.getItem('frozenLeaderboard');
+        setFreezeActive(!!active);
+      } catch {}
+    };
+    check();
+    const handler = (e: Event) => {
+      if ((e as CustomEvent)?.detail && typeof (e as CustomEvent).detail.active === 'boolean') {
+        setFreezeActive(!!(e as CustomEvent).detail.active);
+      } else {
+        check();
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('frozenLeaderboardChange', handler as EventListener);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('frozenLeaderboardChange', handler as EventListener);
+      }
+    };
+  }, []);
 
   const getNavClasses = (path: string) => {
     const isActive = pathname === path;
@@ -82,7 +109,10 @@ export default function Navbar() {
       {/* Navigation Links */}
       <div className="flex flex-wrap md:flex-nowrap items-center justify-center md:justify-end gap-3 md:gap-6 w-full md:ml-auto">
         <Link href="/" className={getNavClasses("/")}>HOME</Link>
-        <Link href="/rankings" className={getNavClasses("/rankings")}>RANKINGS</Link>
+        {(() => {
+          const href = freezeActive ? "/rɑnkings" : "/rankings";
+          return <Link href={href} className={getNavClasses(href)}>RANKINGS</Link>;
+        })()}
         <Link href="/missions" className={getNavClasses("/missions")}>MISSIONS</Link>
         <Link href="/protocols" className={getNavClasses("/protocols")}>PROTOCOLS</Link>
 

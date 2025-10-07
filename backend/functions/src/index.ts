@@ -80,6 +80,12 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 const db = admin.firestore();
+// helper near the top (after `const db = admin.firestore();`)
+async function getEventFlags(): Promise<{ hasstarted: boolean; hasended: boolean }> {
+  const snap = await db.collection('event').doc('status').get();
+  const data = snap.exists ? (snap.data() as any) : {};
+  return { hasstarted: !!data.hasstarted, hasended: !!data.hasended };
+}
 
 //
 // Types
@@ -312,6 +318,10 @@ export const missionsProgress = functions.region('asia-south1').https.onRequest(
     try {
       const app = initAdmin()
       const db = app.firestore()
+      const { hasstarted, hasended } = await getEventFlags()
+      if (!hasstarted) return res.status(403).json({ success: false, message: 'Event has not started' })
+      if (hasended) return res.status(403).json({ success: false, message: 'Event has ended' })
+
       const authHeader = req.headers.authorization || ''
       const idToken = authHeader.replace('Bearer ', '')
       if (!idToken) return res.status(401).json({ error: 'Missing token' })

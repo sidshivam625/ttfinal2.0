@@ -1,8 +1,7 @@
 import React from 'react';
 
-
 export default function Background() {
- return (
+  return (
     <div className="fixed inset-0 -z-10 overflow-hidden bg-[#1b1b1b]">
       {/* Diamond Grid Container */}
       <div className="absolute inset-0">
@@ -37,5 +36,5 @@ export default function Background() {
       <div className="absolute inset-0 bg-gradient-to-b from-[#1b1b1b] via-transparent to-[#1b1b1b] opacity-50" />
       <div className="absolute inset-0 bg-gradient-to-r from-[#1b1b1b] via-transparent to-[#1b1b1b] opacity-50" />
     </div>
- );
-};
+  );
+}
