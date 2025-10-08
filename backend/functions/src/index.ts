@@ -509,6 +509,26 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
         } else {
           return res.status(404).json({ success: false, message: 'Custom1 flag not found for this user.' })
         }
+      } else if ((challengeDataTop as any)?.isCustom2 && uid) {
+        // Handle custom2 (freezed leaderboard + sequence) flag validation
+        const collectionName = `custom2challenge${String(challengeId).replace('challenge', '')}`;
+        const custom2Snap = await db.collection(collectionName)
+          .where('userId', '==', uid)
+          .where('challengeId', '==', challengeId)
+          .limit(1)
+          .get();
+        if (!custom2Snap.empty) {
+          const custom2Data = custom2Snap.docs[0].data();
+          isCorrect = submitted === (custom2Data as any).flagData.originalFlag;
+          if (isCorrect) {
+            await custom2Snap.docs[0].ref.update({ isUsed: true });
+          }
+        } else {
+          return res.status(404).json({ success: false, message: 'Custom2 flag not found for this user.' });
+        }
+
+
+
       } else {
         // Handle regular flag validation
         const candidates: string[] = Array.from(new Set([
@@ -790,6 +810,15 @@ function generateCustom1Flag(userId: string, challengeId: string): string {
   const hash = crypto.createHash('sha256').update(seed).digest('hex');
   const flagContent = hash.substring(0, 12);
   return `ctf{${flagContent}}`;
+} 
+
+// Generate custom2 (freezed leaderboard) flag for user-challenge combination
+function generateCustom2Flag(userId: string, challengeId: string): string {
+  const crypto = require('crypto');
+  const seed = `${userId}_${challengeId}_freeze_puzzle`;
+  const hash = crypto.createHash('sha256').update(seed).digest('hex');
+  const flagContent = hash.substring(0, 12);
+  return `ctf{${flagContent}}`;
 }
 
 // Encrypt flag for storage
@@ -930,6 +959,265 @@ export const getUserQRCodes = functions.region('asia-south1').https.onCall(async
   } catch (error) {
     console.error('Error fetching QR codes:', error);
     throw new functions.https.HttpsError('internal', 'Failed to fetch QR codes');
+  }
+}); 
+
+// Custom2: initialize frozen leaderboard and persist 10-digit sequence for the user
+export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall(async (data: any, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+  const uid = context.auth.uid;
+  const challengeId = typeof data?.challengeId === 'string' && data.challengeId ? String(data.challengeId) : null;
+  if (!challengeId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Challenge ID is required');
+  }
+
+  try {
+    const collectionName = `custom2challenge${String(challengeId).replace('challenge', '')}`;
+
+    // If already frozen for this user, do not return DB snapshot (we only store minimal top10 in DB)
+    const existingSnap = await db.collection(collectionName)
+      .where('userId', '==', uid)
+      .where('challengeId', '==', challengeId)
+      .limit(1)
+      .get();
+
+    if (!existingSnap.empty) {
+      return { success: true, challengeId, snapshot: null };
+    }
+
+    // Build full leaderboard snapshot (top 50)
+    const fullSnap = await db.collection('users')
+      .orderBy('totalScore', 'desc')
+      .limit(50)
+      .get();
+    const fullLeaderboard: Array<{ rank: number; uid: string; username: string; totalScore: number; solvedCount: number }> = [];
+    {
+      let r = 1;
+      fullSnap.forEach((doc) => {
+        const d = doc.data() as any;
+        const username = d.username || d.name || 'Anonymous';
+        const totalScore = Number(d.totalScore ?? 0);
+        const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
+        const solvedCount = solvedLogs.filter((e) => Number(e?.actualScore || 0) > 0).length;
+        fullLeaderboard.push({ rank: r++, uid: doc.id, username, totalScore, solvedCount });
+      });
+    }
+
+    // Build top-10 progression history
+    const top10Snap = await db.collection('users')
+      .orderBy('totalScore', 'desc')
+      .limit(10)
+      .get();
+    const topTenHistory: Array<{ rank: number; uid: string; username: string; totalScore: number; pointsOverTime: { time: number; score: number }[] }> = [];
+    {
+      let r = 1;
+      for (const doc of top10Snap.docs) {
+        const d = doc.data() as any;
+        const username = d.username || d.name || 'Anonymous';
+        const totalScore = Number(d.totalScore ?? 0);
+        const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
+        const startTime = d.createdAt?.toMillis?.() || Date.now();
+        const pointsOverTime: { time: number; score: number }[] = [];
+        let cumulativeScore = 0;
+
+        pointsOverTime.push({ time: startTime, score: 0 });
+        const sortedSolved = solvedLogs
+          .filter((e) => e?.solvedAt && String(e.solvedAt).length > 0 && Number(e?.actualScore || 0) > 0)
+          .sort((a, b) => new Date(a.solvedAt).getTime() - new Date(b.solvedAt).getTime());
+        sortedSolved.forEach((log) => {
+          cumulativeScore += Number(log.actualScore || 0);
+          const solveTime = new Date(log.solvedAt).getTime();
+          if (solveTime > pointsOverTime[pointsOverTime.length - 1].time) {
+            pointsOverTime.push({ time: solveTime, score: cumulativeScore });
+          } else {
+            pointsOverTime[pointsOverTime.length - 1].score = cumulativeScore;
+          }
+        });
+
+        topTenHistory.push({ rank: r++, uid: doc.id, username, totalScore, pointsOverTime });
+      }
+    }
+
+    // 10-digit sequence based on top-10 usernames: even letter count => '0', odd => '1'
+    const toBit = (name: string) => {
+      const lettersOnly = String(name || '').replace(/[^A-Za-z]/g, '');
+      return (lettersOnly.length % 2 === 0) ? '0' : '1';
+    };
+    const sequence = topTenHistory.map((p) => toBit(p.username)).join('');
+
+    // Assemble record and persist
+    const userDoc = await db.collection('users').doc(uid).get();
+    const delegateId = (userDoc.data() as any)?.delegateId || '';
+    const flag = generateCustom2Flag(uid, challengeId);
+
+    const snapshot = {
+      timestamp: Date.now(),
+      fullLeaderboard,
+      topTenHistory,
+    };
+
+    // Minimal top-10 to persist in DB (avoid storing full snapshot)
+    const uidToSolvedCount: Record<string, number> = {};
+    for (const entry of fullLeaderboard) {
+      uidToSolvedCount[entry.uid] = entry.solvedCount;
+    }
+    const top10Minimal = topTenHistory.map((p) => ({
+      rank: p.rank,
+      uid: p.uid,
+      username: p.username,
+      totalScore: p.totalScore,
+      solvedCount: uidToSolvedCount[p.uid] ?? 0,
+    }));
+
+    const record = {
+      userId: uid,
+      delegateId,
+      challengeId,
+      flagData: { originalFlag: flag, encryptedFlag: encryptFlag(flag) },
+      frozen: {
+        sequence,
+        top10: top10Minimal,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      isUsed: false,
+    };
+
+    await db.collection(collectionName).add(record);
+
+    // Return full snapshot to the client for local storage, but only minimal data is persisted in DB
+    return { success: true, challengeId, snapshot };
+  } catch (error) {
+    console.error('[getUserCustom2Freeze] Error:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to initialize or fetch custom2 freeze');
+  }
+}); 
+
+// Custom2: validate 10-digit sequence and reveal user's custom2 flag
+export const getCustom2FlagFromSequence = functions.region('asia-south1').https.onCall(async (data: any, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+  const uid = context.auth.uid;
+  const challengeId = typeof data?.challengeId === 'string' && data.challengeId ? String(data.challengeId) : null;
+  const sequenceInput = typeof data?.sequence === 'string' ? String(data.sequence).trim() : '';
+  if (!challengeId || !sequenceInput) {
+    throw new functions.https.HttpsError('invalid-argument', 'challengeId and sequence are required');
+  }
+
+  try {
+    const collectionName = `custom2challenge${String(challengeId).replace('challenge', '')}`;
+    let snap = await db.collection(collectionName)
+      .where('userId', '==', uid)
+      .where('challengeId', '==', challengeId)
+      .limit(1)
+      .get();
+
+    // If missing, lazily create a freeze (persist only minimal top-10)
+    if (snap.empty) {
+      // Reuse freeze init logic (inline for clarity)
+      const fullSnap = await db.collection('users')
+        .orderBy('totalScore', 'desc')
+        .limit(50)
+        .get();
+      const fullLeaderboard: Array<{ rank: number; uid: string; username: string; totalScore: number; solvedCount: number }> = [];
+      {
+        let r = 1;
+        fullSnap.forEach((doc) => {
+          const d = doc.data() as any;
+          const username = d.username || d.name || 'Anonymous';
+          const totalScore = Number(d.totalScore ?? 0);
+          const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
+          const solvedCount = solvedLogs.filter((e) => Number(e?.actualScore || 0) > 0).length;
+          fullLeaderboard.push({ rank: r++, uid: doc.id, username, totalScore, solvedCount });
+        });
+      }
+
+      const top10Snap = await db.collection('users')
+        .orderBy('totalScore', 'desc')
+        .limit(10)
+        .get();
+      const topTenHistory: Array<{ rank: number; uid: string; username: string; totalScore: number; pointsOverTime: { time: number; score: number }[] }> = [];
+      {
+        let r = 1;
+        for (const doc of top10Snap.docs) {
+          const d = doc.data() as any;
+          const username = d.username || d.name || 'Anonymous';
+          const totalScore = Number(d.totalScore ?? 0);
+          const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
+          const startTime = d.createdAt?.toMillis?.() || Date.now();
+          const pointsOverTime: { time: number; score: number }[] = [];
+          let cumulativeScore = 0;
+          pointsOverTime.push({ time: startTime, score: 0 });
+          const sortedSolved = solvedLogs
+            .filter((e) => e?.solvedAt && String(e.solvedAt).length > 0 && Number(e?.actualScore || 0) > 0)
+            .sort((a, b) => new Date(a.solvedAt).getTime() - new Date(b.solvedAt).getTime());
+          sortedSolved.forEach((log) => {
+            cumulativeScore += Number(log.actualScore || 0);
+            const solveTime = new Date(log.solvedAt).getTime();
+            if (solveTime > pointsOverTime[pointsOverTime.length - 1].time) {
+              pointsOverTime.push({ time: solveTime, score: cumulativeScore });
+            } else {
+              pointsOverTime[pointsOverTime.length - 1].score = cumulativeScore;
+            }
+          });
+          topTenHistory.push({ rank: r++, uid: doc.id, username, totalScore, pointsOverTime });
+        }
+      }
+      const toBit = (name: string) => {
+        const lettersOnly = String(name || '').replace(/[^A-Za-z]/g, '');
+        return (lettersOnly.length % 2 === 0) ? '0' : '1';
+      };
+      const sequence = topTenHistory.map((p) => toBit(p.username)).join('');
+
+      const userDoc = await db.collection('users').doc(uid).get();
+      const delegateId = (userDoc.data() as any)?.delegateId || '';
+      const flag = generateCustom2Flag(uid, challengeId);
+      // Minimal top-10 to persist in DB
+      const uidToSolvedCount: Record<string, number> = {};
+      for (const entry of fullLeaderboard) {
+        uidToSolvedCount[entry.uid] = entry.solvedCount;
+      }
+      const top10Minimal = topTenHistory.map((p) => ({
+        rank: p.rank,
+        uid: p.uid,
+        username: p.username,
+        totalScore: p.totalScore,
+        solvedCount: uidToSolvedCount[p.uid] ?? 0,
+      }));
+
+      const record = {
+        userId: uid,
+        delegateId,
+        challengeId,
+        flagData: { originalFlag: flag, encryptedFlag: encryptFlag(flag) },
+        frozen: {
+          sequence,
+          top10: top10Minimal,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        isUsed: false,
+      };
+      await db.collection(collectionName).add(record);
+      snap = await db.collection(collectionName)
+        .where('userId', '==', uid)
+        .where('challengeId', '==', challengeId)
+        .limit(1)
+        .get();
+    }
+
+    const d = snap.docs[0].data() as any;
+    const expected = String(d?.frozen?.sequence || '');
+    if (sequenceInput === expected) {
+      return { success: true, flag: d?.flagData?.originalFlag };
+    }
+    return { success: false, message: 'Incorrect sequence' };
+  } catch (error) {
+    console.error('[getCustom2FlagFromSequence] Error:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to validate sequence');
   }
 });
 

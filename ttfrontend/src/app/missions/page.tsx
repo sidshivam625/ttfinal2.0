@@ -93,21 +93,53 @@ export default function MissionsPage() {
                             if (activeChallenge?.isCustom2) {
                                 const alreadyFrozen = typeof window !== 'undefined' && localStorage.getItem('freezeLeaderboardActive') === 'true' && localStorage.getItem('frozenLeaderboard');
                                 if (!alreadyFrozen) {
-                                    const getFullLeaderboard: any = httpsCallable(functions, 'leaderboard');
-                                    const getHistoryLeaderboard: any = httpsCallable(functions, 'getLeaderboardWithHistory');
-                                    const [fullResult, historyResult] = await Promise.all([
-                                        getFullLeaderboard(),
-                                        getHistoryLeaderboard(),
-                                    ]);
-                                    const snapshot = {
-                                        timestamp: Date.now(),
-                                        fullLeaderboard: (fullResult?.data as any)?.leaderboard ?? [],
-                                        topTenHistory: (historyResult?.data as any)?.leaderboard ?? [],
-                                    };
-                                    localStorage.setItem('frozenLeaderboard', JSON.stringify(snapshot));
-                                    localStorage.setItem('freezeLeaderboardActive', 'true');
-                                    if (typeof window !== 'undefined') {
-                                        window.dispatchEvent(new CustomEvent('frozenLeaderboardChange', { detail: { active: true } }));
+                                    try {
+                                        const initFreeze: any = httpsCallable(functions, 'getUserCustom2Freeze');
+                                        const r = await initFreeze({ challengeId: activeChallenge.challengeId || activeChallenge.id });
+                                        const snapshot = (r?.data as any)?.snapshot;
+                                        if (snapshot) {
+                                            localStorage.setItem('frozenLeaderboard', JSON.stringify(snapshot));
+                                            localStorage.setItem('freezeLeaderboardActive', 'true');
+                                            if (typeof window !== 'undefined') {
+                                                window.dispatchEvent(new CustomEvent('frozenLeaderboardChange', { detail: { active: true } }));
+                                            }
+                                        } else {
+                                            // Fallback: derive from current public leaderboards
+                                            const getFullLeaderboard: any = httpsCallable(functions, 'leaderboard');
+                                            const getHistoryLeaderboard: any = httpsCallable(functions, 'getLeaderboardWithHistory');
+                                            const [fullResult, historyResult] = await Promise.all([
+                                                getFullLeaderboard(),
+                                                getHistoryLeaderboard(),
+                                            ]);
+                                            const fallback = {
+                                                timestamp: Date.now(),
+                                                fullLeaderboard: (fullResult?.data as any)?.leaderboard ?? [],
+                                                topTenHistory: (historyResult?.data as any)?.leaderboard ?? [],
+                                            };
+                                            localStorage.setItem('frozenLeaderboard', JSON.stringify(fallback));
+                                            localStorage.setItem('freezeLeaderboardActive', 'true');
+                                            if (typeof window !== 'undefined') {
+                                                window.dispatchEvent(new CustomEvent('frozenLeaderboardChange', { detail: { active: true } }));
+                                            }
+                                        }
+                                    } catch (err) {
+                                        console.warn('getUserCustom2Freeze failed, using fallback:', err);
+                                        const getFullLeaderboard: any = httpsCallable(functions, 'leaderboard');
+                                        const getHistoryLeaderboard: any = httpsCallable(functions, 'getLeaderboardWithHistory');
+                                        const [fullResult, historyResult] = await Promise.all([
+                                            getFullLeaderboard(),
+                                            getHistoryLeaderboard(),
+                                        ]);
+                                        const snapshot = {
+                                            timestamp: Date.now(),
+                                            fullLeaderboard: (fullResult?.data as any)?.leaderboard ?? [],
+                                            topTenHistory: (historyResult?.data as any)?.leaderboard ?? [],
+                                        };
+                                        localStorage.setItem('frozenLeaderboard', JSON.stringify(snapshot));
+                                        localStorage.setItem('freezeLeaderboardActive', 'true');
+                                        if (typeof window !== 'undefined') {
+                                            window.dispatchEvent(new CustomEvent('frozenLeaderboardChange', { detail: { active: true } }));
+                                        }
                                     }
                                 }
                             } else {
@@ -126,6 +158,58 @@ export default function MissionsPage() {
         }
         fetchProgress();
     }, [uid, challenges]);
+
+    // Initialize freeze when entering an isCustom2 challenge (runs every render, safe with early returns below)
+    useEffect(() => {
+        const c = challenges[currentIdx];
+        if (!c || !c.isCustom2) return;
+        try {
+            const alreadyFrozen = typeof window !== 'undefined' && localStorage.getItem('freezeLeaderboardActive') === 'true' && localStorage.getItem('frozenLeaderboard');
+            if (!alreadyFrozen) {
+                (async () => {
+                    try {
+                        const initFreeze: any = httpsCallable(functions, 'getUserCustom2Freeze');
+                        const r = await initFreeze({ challengeId: c.challengeId || c.id });
+                        const snapshot = (r?.data as any)?.snapshot;
+                        if (snapshot) {
+                            localStorage.setItem('frozenLeaderboard', JSON.stringify(snapshot));
+                            localStorage.setItem('freezeLeaderboardActive', 'true');
+                            if (typeof window !== 'undefined') {
+                                window.dispatchEvent(new CustomEvent('frozenLeaderboardChange', { detail: { active: true } }));
+                            }
+                        }
+                    } catch (e) {
+                        // optional: fallback omitted here to avoid double-calling other effects
+                    }
+                })();
+            }
+        } catch {}
+    }, [challenges, currentIdx]);
+
+    // Expose DevTools helper submitSequence(seq) while on an isCustom2 challenge
+    useEffect(() => {
+        const c = challenges[currentIdx];
+        if (!c || !c.isCustom2) {
+            try { delete (window as any).submitSequence; } catch {}
+            return;
+        }
+        const challengeId = c.challengeId || c.id;
+        (window as any).submitSequence = async (seq: string) => {
+            try {
+                const getFlag: any = httpsCallable(functions, 'getCustom2FlagFromSequence');
+                const r = await getFlag({ challengeId, sequence: String(seq || '').trim() });
+                const data: any = r?.data || {};
+                if (data.success && data.flag) {
+                    console.log(data.flag);
+                } else {
+                    console.log('Incorrect sequence');
+                }
+            } catch (e) {
+                console.log('Error validating sequence');
+            }
+        };
+        return () => { try { delete (window as any).submitSequence; } catch {} };
+    }, [challenges, currentIdx]);
 
     async function validateFlag(flag: string): Promise<{ success: boolean; message: string }> {
         if (!challenges.length) return { success: false, message: "No challenge loaded." };
@@ -163,19 +247,53 @@ export default function MissionsPage() {
                             if (nextChallenge?.isCustom2) {
                                 const alreadyFrozen = typeof window !== 'undefined' && localStorage.getItem('freezeLeaderboardActive') === 'true' && localStorage.getItem('frozenLeaderboard');
                                 if (!alreadyFrozen) {
-                                    const getFullLeaderboard: any = httpsCallable(functions, 'leaderboard');
-                                    const getHistoryLeaderboard: any = httpsCallable(functions, 'getLeaderboardWithHistory');
-                                    const [fullResult, historyResult] = await Promise.all([
-                                        getFullLeaderboard(),
-                                        getHistoryLeaderboard(),
-                                    ]);
-                                    const snapshot = {
-                                        timestamp: Date.now(),
-                                        fullLeaderboard: (fullResult?.data as any)?.leaderboard ?? [],
-                                        topTenHistory: (historyResult?.data as any)?.leaderboard ?? [],
-                                    };
-                                    localStorage.setItem('frozenLeaderboard', JSON.stringify(snapshot));
-                                    localStorage.setItem('freezeLeaderboardActive', 'true');
+                                    try {
+                                        const initFreeze: any = httpsCallable(functions, 'getUserCustom2Freeze');
+                                        const r = await initFreeze({ challengeId: nextChallenge.challengeId || nextChallenge.id });
+                                        const snapshot = (r?.data as any)?.snapshot;
+                                        if (snapshot) {
+                                            localStorage.setItem('frozenLeaderboard', JSON.stringify(snapshot));
+                                            localStorage.setItem('freezeLeaderboardActive', 'true');
+                                            if (typeof window !== 'undefined') {
+                                                window.dispatchEvent(new CustomEvent('frozenLeaderboardChange', { detail: { active: true } }));
+                                            }
+                                        } else {
+                                            const getFullLeaderboard: any = httpsCallable(functions, 'leaderboard');
+                                            const getHistoryLeaderboard: any = httpsCallable(functions, 'getLeaderboardWithHistory');
+                                            const [fullResult, historyResult] = await Promise.all([
+                                                getFullLeaderboard(),
+                                                getHistoryLeaderboard(),
+                                            ]);
+                                            const fallback = {
+                                                timestamp: Date.now(),
+                                                fullLeaderboard: (fullResult?.data as any)?.leaderboard ?? [],
+                                                topTenHistory: (historyResult?.data as any)?.leaderboard ?? [],
+                                            };
+                                            localStorage.setItem('frozenLeaderboard', JSON.stringify(fallback));
+                                            localStorage.setItem('freezeLeaderboardActive', 'true');
+                                            if (typeof window !== 'undefined') {
+                                                window.dispatchEvent(new CustomEvent('frozenLeaderboardChange', { detail: { active: true } }));
+                                            }
+                                        }
+                                    } catch (err) {
+                                        console.warn('getUserCustom2Freeze failed, using fallback:', err);
+                                        const getFullLeaderboard: any = httpsCallable(functions, 'leaderboard');
+                                        const getHistoryLeaderboard: any = httpsCallable(functions, 'getLeaderboardWithHistory');
+                                        const [fullResult, historyResult] = await Promise.all([
+                                            getFullLeaderboard(),
+                                            getHistoryLeaderboard(),
+                                        ]);
+                                        const snapshot = {
+                                            timestamp: Date.now(),
+                                            fullLeaderboard: (fullResult?.data as any)?.leaderboard ?? [],
+                                            topTenHistory: (historyResult?.data as any)?.leaderboard ?? [],
+                                        };
+                                        localStorage.setItem('frozenLeaderboard', JSON.stringify(snapshot));
+                                        localStorage.setItem('freezeLeaderboardActive', 'true');
+                                        if (typeof window !== 'undefined') {
+                                            window.dispatchEvent(new CustomEvent('frozenLeaderboardChange', { detail: { active: true } }));
+                                        }
+                                    }
                                 }
                             } else {
                                 localStorage.removeItem('frozenLeaderboard');
