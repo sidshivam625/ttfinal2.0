@@ -110,7 +110,7 @@ export default function Navbar() {
       <div className="flex flex-wrap md:flex-nowrap items-center justify-center md:justify-end gap-3 md:gap-6 w-full md:ml-auto">
         <Link href="/" className={getNavClasses("/")}>HOME</Link>
         {(() => {
-          const href = freezeActive ? "/rɑnkings" : "/rankings";
+          const href = freezeActive ? "/frozen-rankings" : "/rankings";
           return <Link href={href} className={getNavClasses(href)}>RANKINGS</Link>;
         })()}
         <Link href="/missions" className={getNavClasses("/missions")}>MISSIONS</Link>
