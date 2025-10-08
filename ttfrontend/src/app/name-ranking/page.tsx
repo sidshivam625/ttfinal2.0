@@ -80,7 +80,7 @@ function buildChartJsData(players: PlayerHistory[]) {
   return { labels, datasets };
 }
 
-export default function FrozenRankingsPage() {
+export default function RankingPage() {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState<FrozenSnapshot | null>(null);
 
@@ -127,7 +127,7 @@ export default function FrozenRankingsPage() {
       <div className="relative z-10 p-4 sm:p-8 lg:p-12 max-w-7xl mx-auto">
         <header className="flex items-center gap-4 pb-4 mb-6 border-b border-[#7a2f49]">
           <BarChart2 size={40} className="text-[#ef3b57]" />
-          <h1 className="font-vt323 text-4xl text-[#ffdcdc] tracking-widest">LEADERBOARD (FROZEN)</h1>
+          <h1 className="font-vt323 text-4xl text-[#ffdcdc] tracking-widest">RANKING (FROZEN)</h1>
         </header>
 
         <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 px-4 py-3 rounded mb-6 font-vt323">
@@ -185,3 +185,5 @@ export default function FrozenRankingsPage() {
     </div>
   );
 }
+
+

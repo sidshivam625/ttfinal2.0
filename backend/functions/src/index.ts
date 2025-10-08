@@ -976,7 +976,7 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
   try {
     const collectionName = `custom2challenge${String(challengeId).replace('challenge', '')}`;
 
-    // If already frozen for this user, return the stored snapshot
+    // If already frozen for this user, do not return DB snapshot (we only store minimal top10 in DB)
     const existingSnap = await db.collection(collectionName)
       .where('userId', '==', uid)
       .where('challengeId', '==', challengeId)
@@ -984,8 +984,7 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
       .get();
 
     if (!existingSnap.empty) {
-      const d = existingSnap.docs[0].data() as any;
-      return { success: true, challengeId, snapshot: d?.frozen?.snapshot || null };
+      return { success: true, challengeId, snapshot: null };
     }
 
     // Build full leaderboard snapshot (top 50)
@@ -1059,6 +1058,19 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
       topTenHistory,
     };
 
+    // Minimal top-10 to persist in DB (avoid storing full snapshot)
+    const uidToSolvedCount: Record<string, number> = {};
+    for (const entry of fullLeaderboard) {
+      uidToSolvedCount[entry.uid] = entry.solvedCount;
+    }
+    const top10Minimal = topTenHistory.map((p) => ({
+      rank: p.rank,
+      uid: p.uid,
+      username: p.username,
+      totalScore: p.totalScore,
+      solvedCount: uidToSolvedCount[p.uid] ?? 0,
+    }));
+
     const record = {
       userId: uid,
       delegateId,
@@ -1066,7 +1078,7 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
       flagData: { originalFlag: flag, encryptedFlag: encryptFlag(flag) },
       frozen: {
         sequence,
-        snapshot,
+        top10: top10Minimal,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1075,6 +1087,7 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
 
     await db.collection(collectionName).add(record);
 
+    // Return full snapshot to the client for local storage, but only minimal data is persisted in DB
     return { success: true, challengeId, snapshot };
   } catch (error) {
     console.error('[getUserCustom2Freeze] Error:', error);
@@ -1102,7 +1115,7 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
       .limit(1)
       .get();
 
-    // If missing, lazily create a freeze (same as first-time init)
+    // If missing, lazily create a freeze (persist only minimal top-10)
     if (snap.empty) {
       // Reuse freeze init logic (inline for clarity)
       const fullSnap = await db.collection('users')
@@ -1162,6 +1175,19 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
       const userDoc = await db.collection('users').doc(uid).get();
       const delegateId = (userDoc.data() as any)?.delegateId || '';
       const flag = generateCustom2Flag(uid, challengeId);
+      // Minimal top-10 to persist in DB
+      const uidToSolvedCount: Record<string, number> = {};
+      for (const entry of fullLeaderboard) {
+        uidToSolvedCount[entry.uid] = entry.solvedCount;
+      }
+      const top10Minimal = topTenHistory.map((p) => ({
+        rank: p.rank,
+        uid: p.uid,
+        username: p.username,
+        totalScore: p.totalScore,
+        solvedCount: uidToSolvedCount[p.uid] ?? 0,
+      }));
+
       const record = {
         userId: uid,
         delegateId,
@@ -1169,11 +1195,7 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
         flagData: { originalFlag: flag, encryptedFlag: encryptFlag(flag) },
         frozen: {
           sequence,
-          snapshot: {
-            timestamp: Date.now(),
-            fullLeaderboard,
-            topTenHistory,
-          },
+          top10: top10Minimal,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
