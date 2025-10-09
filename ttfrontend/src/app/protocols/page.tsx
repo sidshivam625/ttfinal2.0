@@ -18,7 +18,7 @@ const ProtocolCard = () => {
                         I. Point Acquisition Matrix
                     </h3>
                     <p className="text-[#d1d5db] leading-relaxed text-lg">
-                        Points are allocated upon ingestion of a valid flag string. The value is static, calculated by target systems. There are various types of systems, however they have the same PTS. :
+                        Points are allocated upon ingestion of a valid flag string. The value is static, calculated by target systems. There are various types of systems:
                     </p>
                     <ul className="list-none mt-4 flex flex-col gap-3">
                         <li className="bg-[rgba(220,38,38,0.5)] border border-[#f73750] text-[#d1d5db] p-3 rounded-md flex items-center justify-between text-lg">
@@ -27,11 +27,15 @@ const ProtocolCard = () => {
                         </li>
                         <li className="bg-[rgba(220,38,38,0.5)] border border-[#f73750] text-[#d1d5db] p-3 rounded-md flex items-center justify-between text-lg">
                            <span className="text-[#f97316] font-bold">Medium Systems:</span>
-                           <span><span className="opacity-70 mx-1">▲</span>100<span className="opacity-70 mx-1">▲</span> PTS</span>
+                           <span><span className="opacity-70 mx-1">▲</span>200<span className="opacity-70 mx-1">▲</span> PTS</span>
                         </li>
                         <li className="bg-[rgba(220,38,38,0.5)] border border-[#f73750] text-[#d1d5db] p-3 rounded-md flex items-center justify-between text-lg">
                            <span className="text-[#f97316] font-bold">Hard Systems:</span>
-                           <span><span className="opacity-70 mx-1">▲</span>100<span className="opacity-70 mx-1">▲</span> PTS</span>
+                           <span><span className="opacity-70 mx-1">▲</span>300<span className="opacity-70 mx-1">▲</span> PTS</span>
+                        </li>
+                        <li className="bg-[rgba(220,38,38,0.5)] border border-[#f73750] text-[#d1d5db] p-3 rounded-md flex items-center justify-between text-lg">
+                           <span className="text-[#f97316] font-bold">Critical Systems:</span>
+                           <span><span className="opacity-70 mx-1">▲</span>500<span className="opacity-70 mx-1">▲</span> PTS</span>
                         </li>
                        
                     </ul>
