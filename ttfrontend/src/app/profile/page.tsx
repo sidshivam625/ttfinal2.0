@@ -238,7 +238,7 @@ export default function ProfilePage() {
             <button
               onClick={handleResendVerification}
               disabled={verificationSent}
-              className="w-full px-4 py-3 font-vt323 uppercase tracking-wider text-lg text-white bg-[#ef3b57] rounded-lg hover:bg-[#ed2947] disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-300"
+              className="w-full my-4 px-4 py-3 font-vt323 uppercase tracking-wider text-lg text-white bg-[#ef3b57] rounded-lg hover:bg-[#ed2947] disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-300"
             >
               {verificationSent ? "SENT!" : "RESEND EMAIL"}
             </button>

@@ -207,7 +207,7 @@ export const createAccount = functions.region('asia-south1').https.onCall(async 
 
     // Build a solved_logs scaffold with 29 entries so mission logic has a predictable shape
     const solved_logs: any[] = [];
-    for (let i = 1; i <= 29; i++) {
+    for (let i = 1; i <= 32; i++) {
       solved_logs.push({
         challengeId: `challenge${i}`,
         solvedAt: '',

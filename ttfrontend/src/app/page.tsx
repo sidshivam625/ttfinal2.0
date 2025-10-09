@@ -168,6 +168,7 @@ export default function Home() {
           <div className="flex items-center justify-center gap-3">
             <span>with 💚 Cryptic Finds gng </span>
           </div>
+          {/* cryptic{h1dd3n_am0ng_n01s3} */}
           <div className="mt-3 text-xs text-gray-600">
             © {new Date().getFullYear()} Cryptic Finds · Be kind, play fair.
           </div>

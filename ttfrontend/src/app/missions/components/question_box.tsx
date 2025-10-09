@@ -63,9 +63,6 @@ export default function CTFCard({
         {/* Target line */}
         <div className="flex items-center gap-4">
           <span className="font-vt323 text-sm leading-5 tracking-[0.7px] text-[#99A1AF]">
-            TARGET.ID #01
-
-            Points : {points || 0}
           </span>
           <div className="flex-1 flex items-center gap-3">
             <div

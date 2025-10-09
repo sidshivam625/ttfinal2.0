@@ -130,11 +130,6 @@ export default function RankingPage() {
           <h1 className="font-vt323 text-4xl text-[#ffdcdc] tracking-widest">RANKING</h1>
         </header>
 
-        <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 px-4 py-3 rounded mb-6 font-vt323">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          </div>
-        </div>
-
         <div className="bg-[#2b0f1a]/50 p-6 rounded-xl border border-[#7a2f49] shadow-lg mb-8">
           <h3 className="font-vt323 text-2xl text-[#ef3b57] mb-4">// TOP 10 SCORE PROGRESSION</h3>
           <div style={{ width: "100%", height: 400 }}>
