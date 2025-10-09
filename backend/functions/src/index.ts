@@ -205,9 +205,9 @@ export const createAccount = functions.region('asia-south1').https.onCall(async 
       emailVerified: false,
     });
 
-    // Build a solved_logs scaffold with 25 entries so mission logic has a predictable shape
+    // Build a solved_logs scaffold with 29 entries so mission logic has a predictable shape
     const solved_logs: any[] = [];
-    for (let i = 1; i <= 25; i++) {
+    for (let i = 1; i <= 29; i++) {
       solved_logs.push({
         challengeId: `challenge${i}`,
         solvedAt: '',
@@ -644,6 +644,22 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
       let freeAttemptsLeft: number | null = null
       let currentPenalty: number = 0
 
+      // Check for cheating on incorrect submissions - if they submitted someone else's custom flag
+      let cheatedUserIds: string[] = [];
+      let currentUserCheated = false;
+      if (uid) {
+        cheatedUserIds = await checkForCheating(db, challengeId, submitted, uid);
+        if (cheatedUserIds.length > 0) {
+          console.log('[adminSubmitFlag] Cheating detected on incorrect submission:', { 
+            challengeId, 
+            submittedFlag: submitted, 
+            currentUser: uid, 
+            cheatedUsers: cheatedUserIds 
+          });
+          currentUserCheated = true;
+        }
+      }
+
       if (uid) {
         const userRef = db.collection('users').doc(uid)
         await db.runTransaction(async (tx) => {
@@ -683,6 +699,29 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
 
           tx.set(userRef, { solved_logs: logs }, { merge: true })
         })
+        
+        // Mark current user as cheated if they submitted someone else's custom flag (outside transaction)
+        if (currentUserCheated) {
+          // Find and update the current user's custom flag record
+          const collections = [
+            `customFlagChallenge${String(challengeId).replace('challenge', '')}`,
+            `custom1challenge${String(challengeId).replace('challenge', '')}`,
+            `custom2challenge${String(challengeId).replace('challenge', '')}`
+          ];
+          
+          for (const collectionName of collections) {
+            const customFlagSnap = await db.collection(collectionName)
+              .where('userId', '==', uid)
+              .where('challengeId', '==', challengeId)
+              .limit(1)
+              .get();
+            
+            if (!customFlagSnap.empty) {
+              await customFlagSnap.docs[0].ref.update({ hasCheated: true });
+              break; // Found and updated, no need to check other collections
+            }
+          }
+        }
       }
 
       const incorrectMsg = freeAttemptsLeft == null
@@ -831,6 +870,43 @@ function encryptFlag(flag: string): string {
   return encrypted;
 }
 
+// Check for cheating: see if submitted flag matches another user's flag for the same challenge
+async function checkForCheating(db: admin.firestore.Firestore, challengeId: string, submittedFlag: string, currentUserId: string): Promise<string[]> {
+  const cheatedUserIds: string[] = [];
+  
+  try {
+    // Check all custom flag collections for this challenge
+    const collections = [
+      `customFlagChallenge${String(challengeId).replace('challenge', '')}`,
+      `custom1challenge${String(challengeId).replace('challenge', '')}`,
+      `custom2challenge${String(challengeId).replace('challenge', '')}`
+    ];
+    
+    for (const collectionName of collections) {
+      const snap = await db.collection(collectionName)
+        .where('challengeId', '==', challengeId)
+        .get();
+      
+      for (const doc of snap.docs) {
+        const data = doc.data() as any;
+        const storedFlag = data?.flagData?.originalFlag;
+        const userId = data?.userId;
+        
+        // If flag matches another user's flag and it's not the current user
+        if (storedFlag === submittedFlag && userId !== currentUserId) {
+          cheatedUserIds.push(userId);
+          // Mark this user as cheated
+          await doc.ref.update({ hasCheated: true });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[checkForCheating] Error:', error);
+  }
+  
+  return cheatedUserIds;
+}
+
 // Create custom flags for a user
 async function createCustomFlagsForUser(userId: string, delegateId: string) {
   try {
@@ -860,7 +936,8 @@ async function createCustomFlagsForUser(userId: string, delegateId: string) {
           qrImages: qrData
         },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        isUsed: false
+        isUsed: false,
+        hasCheated: false
       };
       
       const collectionName = `customFlagChallenge${String(challengeId).replace('challenge', '')}`;
@@ -906,6 +983,7 @@ async function createCustom1FlagsForUser(userId: string, delegateId: string) {
         },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         isUsed: false,
+        hasCheated: false,
       };
 
       // Collection naming for cookies, e.g. custom1challenge5
@@ -1083,6 +1161,7 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
       },
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       isUsed: false,
+      hasCheated: false,
     };
 
     await db.collection(collectionName).add(record);
@@ -1200,6 +1279,7 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
         },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         isUsed: false,
+        hasCheated: false,
       };
       await db.collection(collectionName).add(record);
       snap = await db.collection(collectionName)
