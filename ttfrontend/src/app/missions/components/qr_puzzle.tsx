@@ -159,7 +159,7 @@ export default function QRPuzzle({ challengeId }: QRPuzzleProps) {
       <div className="mt-4 flex justify-center">
         <a
           href={`data:${mime};base64,${dataBase64}`}
-          download={`corrupted_qr_${challengeId}.${ext}`}
+          download="4231.svg"
           className="px-6 py-2 bg-[#FF6467]/20 border border-[#FF6467] rounded text-[#FF6467] hover:bg-[#FF6467]/30 font-vt323 text-sm transition-colors"
         >
           DOWNLOAD DISTORTED QR CODE ({ext.toUpperCase()})

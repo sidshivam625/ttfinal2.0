@@ -839,7 +839,7 @@ function generateCustomFlag(userId: string, challengeId: string): string {
   const hash = crypto.createHash('sha256').update(seed).digest('hex');
   // Take first 12 characters for a shorter flag
   const flagContent = hash.substring(0, 12);
-  return `ctf{${flagContent}}`;
+  return `cryptic{${flagContent}}`;
 }
 
 // Generate custom1 (cookie-based) flag for user-challenge combination
@@ -848,7 +848,7 @@ function generateCustom1Flag(userId: string, challengeId: string): string {
   const seed = `${userId}_${challengeId}_cookie_puzzle`;
   const hash = crypto.createHash('sha256').update(seed).digest('hex');
   const flagContent = hash.substring(0, 12);
-  return `ctf{${flagContent}}`;
+  return `cryptic{${flagContent}}`;
 } 
 
 // Generate custom2 (freezed leaderboard) flag for user-challenge combination
@@ -857,7 +857,7 @@ function generateCustom2Flag(userId: string, challengeId: string): string {
   const seed = `${userId}_${challengeId}_freeze_puzzle`;
   const hash = crypto.createHash('sha256').update(seed).digest('hex');
   const flagContent = hash.substring(0, 12);
-  return `ctf{${flagContent}}`;
+  return `cryptic{${flagContent}}`;
 }
 
 // Encrypt flag for storage
