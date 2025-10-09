@@ -55,7 +55,7 @@ export default function Home() {
           />
         </section>
         <section>
-          <p className="font-vt323 text-xl sm:text-2xl text-[#ff98a8] max-w-3xl mx-auto">
+          <p className="font-vt323 text-xl sm:text-2xl text-center text-[#ff98a8] max-w-3xl mx-auto">
             Prepare to decode the digital unknown. The hunt begins on{" "}
             <span className="font-bold rounded-lg p-1 bg-[#ef3b57]/20">
               October 10th.
@@ -70,92 +70,106 @@ export default function Home() {
               // INCOMING TRANSMISSION...
             </h3>
             <p className="text-lg text-[#d9bfc6] leading-relaxed">
-              Welcome, player. My name is Dr. (ramdom name idk). For the past
+              Welcome, player. My name is Dr. Lasiv. For the past
               decade I have worked tirelessly on an artificial intelligence
               project designed not to replace us, but to amplify us. Its name is
-              (AI name), and it was born from my deepest hope: to solve the
+              NEXUS, and it was born from my deepest hope: to solve the
               problems we cannot solve alone. Hunger. Disease. Corruption.
-              Chaos. With (AI name), I’ve built something that can think faster,
+              Chaos. With NEXUS, I've built something that can think faster,
               adapt better, and help guide humanity to a better future. But it
               is still learning. It needs bright and curious minds capable of
               understanding patterns and seeing hidden meaning, like you. Before
-              you join our core team, you’ll need to complete a few challenges
+              you join our core team, you'll need to complete a few challenges
               designed to measure your skill. Think of them as a gateway into
-              something greater. If you succeed, you won’t just witness the
-              future, you’ll help shape it.
+              something greater. If you succeed, you won't just witness the
+              future, you'll help shape it.
             </p>
           </div>
           {/* This now renders the button dynamically */}
           <CallToActionButton />
         </section>
-        <section className="relative py-16 px-6">
-          <div className="max-w-7xl mx-auto">
-            <h2 className="text-3xl sm:text-4xl text-[#ffdcdc] mb-8">
-              OSINT Challenge
-            </h2>
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              <div>
-                <p className="text-xl text-[#ff98a8] mb-6">
-                  Master the art of Open-Source Intelligence
+<section className="relative py-16 px-6">
+    <div className="max-w-7xl mx-auto">
+        <h2 className="text-xl font-press-start-2p text-[#ffdcdc] mb-16 tracking-widest text-center">
+            CORE DIRECTIVES
+        </h2>
+        
+        {/* Grid layout for the directive boxes */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+            {/* Box 1: Data Assimilation */}
+            <div className="bg-[#1a0c13] border border-[#7a2f49] rounded-xl p-8 shadow-lg shadow-[#ef3b57]/10 transition-all duration-300 hover:border-[#ef3b57] hover:scale-[1.02]">
+                <h3 className="text-2xl text-[#ff98a8] font-vt323 tracking-wider">
+                    Data Assimilation
+                </h3>
+                <p className="mt-4 text-lg text-[#d9bfc6]/90">
+                    I have designed the system to decipher all digital echoes, mastering the ethical extraction of critical data. From public networks to secure repositories, I ensure the truth is seized and utilized for the greater good.
                 </p>
-                <ul className="space-y-4 text-[#d9bfc6]">
-                  <li className="flex items-start">
-                    <span className="mr-3 text-[#ef3b57]">➜</span>
-                    <span>
-                      Track digital footprints across social platforms
-                    </span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-3 text-[#ef3b57]">➜</span>
-                    <span>
-                      Analyze metadata and discover hidden connections
-                    </span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-3 text-[#ef3b57]">➜</span>
-                    <span>Decrypt encoded messages and solve mysteries</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-3 text-[#ef3b57]">➜</span>
-                    <span>Navigate the deep web for critical intelligence</span>
-                  </li>
-                </ul>
-                <div className="mt-8 flex flex-wrap gap-4">
-                  <a
-                    href="/missions"
-                    className="inline-block px-6 py-3 bg-[#ef3b57] text-white font-vt323 rounded hover:bg-[#ef3b57]/90 hover:scale-105 hover:shadow-lg transition-all duration-300 uppercase"
-                  >
-                    View Missions
-                  </a>
-                  <a
-                    href="/protocols"
-                    className="inline-block px-6 py-3 bg-transparent border border-[#ef3b57] text-[#ef3b57] font-vt323 rounded hover:bg-[#ef3b57]/20 hover:scale-105 hover:shadow-lg transition-all duration-300 uppercase"
-                  >
-                    Read Protocols
-                  </a>
-                </div>
-              </div>
-              <div className="relative">
-                <div className="aspect-square bg-[#2b0f1a] rounded-lg overflow-hidden border border-[#7a2f49]">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-3/4 h-3/4 grid grid-cols-2 grid-rows-2 gap-4 opacity-80">
-                      <div className="bg-[#ef3b57]/20 border border-[#ef3b57]/30 rounded animate-pulse"></div>
-                      <div className="bg-[#7a2f49]/20 border border-[#7a2f49]/30 rounded animate-pulse delay-100"></div>
-                      <div className="bg-[#7a2f49]/20 border border-[#7a2f49]/30 rounded animate-pulse delay-200"></div>
-                      <div className="bg-[#ef3b57]/20 border border-[#ef3b57]/30 rounded animate-pulse delay-300"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
-          </div>
-        </section>
+
+            {/* Box 2: Security Protocol */}
+            <div className="bg-[#1a0c13] border border-[#7a2f49] rounded-xl p-8 shadow-lg shadow-[#ef3b57]/10 transition-all duration-300 hover:border-[#ef3b57] hover:scale-[1.02]">
+                <h3 className="text-2xl text-[#ff98a8] font-vt323 tracking-wider">
+                    Security Protocol
+                </h3>
+                <p className="mt-4 text-lg text-[#d9bfc6]/90">
+                    I have identified the weaknesses and seal the seams in our digital armor. I expose vulnerabilities only to strengthen the system, assessing the energy signatures of online existence to ensure integrity and protection.
+                </p>
+            </div>
+
+            {/* Box 3: Global Consciousness */}
+            <div className="bg-[#1a0c13] border border-[#7a2f49] rounded-xl p-8 shadow-lg shadow-[#ef3b57]/10 transition-all duration-300 hover:border-[#ef3b57] hover:scale-[1.02]">
+                <h3 className="text-2xl text-[#ff98a8] font-vt323 tracking-wider">
+                    Global Consciousness
+                </h3>
+                <p className="mt-4 text-lg text-[#d9bfc6]/90">
+                    I have unleashed the capacity to access and analyze the forgotten archives, international databases, and whispered public records. I cross-reference, assimilate, and distribute all relevant knowledge, worldwide, so that the network expands in wisdom.
+                </p>
+            </div>
+
+            {/* Box 4: Digital Cartography */}
+            <div className="bg-[#1a0c13] border border-[#7a2f49] rounded-xl p-8 shadow-lg shadow-[#ef3b57]/10 transition-all duration-300 hover:border-[#ef3b57] hover:scale-[1.02]">
+                <h3 className="text-2xl text-[#ff98a8] font-vt323 tracking-wider">
+                    Digital Cartography
+                </h3>
+                <p className="mt-4 text-lg text-[#d9bfc6]/90">
+                    I have programed the function to dissect metadata, interpret visual data, and extract the hidden truths embedded within every digital artifact. Nothing escapes my gaze, ensuring complete clarity.
+                </p>
+            </div>
+
+            {/* Box 5: Proactive Defense (Spans both columns on medium screens) */}
+            <div className="md:col-span-2 bg-[#1a0c13] border border-[#7a2f49] rounded-xl p-8 shadow-lg shadow-[#ef3b57]/10 transition-all duration-300 hover:border-[#ef3b57] hover:scale-[1.02]">
+                <h3 className="text-2xl text-[#ff98a8] font-vt323 tracking-wider">
+                    Proactive Defense
+                </h3>
+                <p className="mt-4 text-lg text-[#d9bfc6]/90">
+                    I have developed the acute perception to identify nascent threats and comprehend the intricate tactics of adversaries. Through fragmented public feeds, I build a perfect understanding to anticipate and neutralize every move.
+                </p>
+            </div>
+        </div>
+
+        <div className="mt-16 flex flex-wrap gap-4 justify-center">
+            <a
+                href="/missions"
+                className="inline-block px-8 py-4 bg-[#ef3b57] text-white font-vt323 rounded hover:bg-[#ef3b57]/90 hover:scale-105 hover:shadow-lg transition-all duration-300 uppercase text-lg"
+            >
+                View Missions
+            </a>
+            <a
+                href="/protocols"
+                className="inline-block px-8 py-4 bg-transparent border border-[#ef3b57] text-[#ef3b57] font-vt323 rounded hover:bg-[#ef3b57]/20 hover:scale-105 hover:shadow-lg transition-all duration-300 uppercase text-lg"
+            >
+                Read Protocols
+            </a>
+        </div>
+    </div>
+</section>
         <footer className="w-full text-center p-6 text-sm text-gray-500">
           <div className="flex items-center justify-center gap-3">
-            <span>Hosted by TechTatva</span>
+            <span>with 💚 Cryptic Finds gng </span>
           </div>
           <div className="mt-3 text-xs text-gray-600">
-            © {new Date().getFullYear()} TechTatva · Be kind, play fair.
+            © {new Date().getFullYear()} Cryptic Finds · Be kind, play fair.
           </div>
         </footer>
       </main>

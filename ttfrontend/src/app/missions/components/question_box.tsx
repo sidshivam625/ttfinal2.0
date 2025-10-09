@@ -1,5 +1,5 @@
 import React from "react";
-
+import ReactMarkDown from "react-markdown"
 export interface CTFCardProps {
   title: string;
   description: string;
@@ -109,9 +109,12 @@ export default function CTFCard({
         className="mt-3 w-full rounded-[5px] border px-4 py-4"
         style={{ borderColor: "#FB2C36" }}
       >
-        <p className="font-vt323 text-base leading-[26px] text-[#D1D5DC]">
+        <span className="font-vt323 text-base leading-[26px] whitespace-pre-line text-[#D1D5DC]">
+          <ReactMarkDown>
+
           {description}
-        </p>
+          </ReactMarkDown>
+        </span>
       </div>
 
       {/* NEW: Custom content section */}

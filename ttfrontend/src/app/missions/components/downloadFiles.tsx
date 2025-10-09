@@ -24,15 +24,7 @@ export default function IntelFiles({ links }: { links?: string }) {
     const urlList = links.split(',').map(link => link.trim());
 
     // Helper function to extract a readable filename from a URL.
-    const getFileName = (url: string) => {
-        try {
-            // Use the URL constructor to safely parse the URL
-            return new URL(url).pathname.split('/').pop() || "download";
-        } catch {
-            // Fallback for invalid URLs
-            return "invalid_link";
-        }
-    }
+
 
     return (
         <div 
@@ -50,10 +42,9 @@ export default function IntelFiles({ links }: { links?: string }) {
                     key={index}
                     href={url}
                     target="_blank"
-                    rel="noopener noreferrer"
                     className="flex items-center justify-between px-4 py-2 bg-[#522546]/50 border border-[#89304E] rounded-md text-gray-300 hover:bg-[#89304E] hover:text-white transition-colors group"
                 >
-                    <span className="font-vt323 text-sm truncate">{getFileName(url)}</span>
+                    <span className="font-vt323 text-sm truncate">DOWNLOAD</span>
                     <Download size={18} className="text-gray-400 group-hover:text-white transition-colors" />
                 </a>
             ))}
