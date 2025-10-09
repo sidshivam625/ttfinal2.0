@@ -48,10 +48,7 @@ const ProtocolCard = () => {
                     <p className="text-[#d1d5db] leading-relaxed text-lg">
                         System integrity is paramount. Invalid flag sequences submitted against high-value targets will trigger defensive subroutines. This protocol is dormant for 'Easy' systems.
                     </p>
-                    <ul className="list-none pl-4 mt-2 space-y-2 text-[#d1d5db] text-lg">
-                        <li className="before:content-['>>'] before:text-[#f97316] before:pr-3">After <span className="text-[#f97316] font-bold">3 invalid submissions</span>, the final point allocation for that target is permanently <span className="text-[#f97316] font-bold">degraded by 10%</span>.</li>
-                        <li className="before:content-['>>'] before:text-[#f97316] before:pr-3">This degradation is a <span className="text-[#f97316] font-bold">one-time event</span> per target. Further invalid submissions will be logged but will not decrease the value further.</li>
-                    </ul>
+                   
                 </div>
 
                 <div>
