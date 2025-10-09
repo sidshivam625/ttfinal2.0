@@ -317,11 +317,6 @@ export default function ProfilePage() {
               value={displayStats.challengesSolved}
               icon={<ShieldCheck size={28} />}
             />
-            <StatItem
-              label="Attempted"
-              value={displayStats.challengesAttempted}
-              icon={<ShieldAlert size={28} />}
-            />
           </div>
         </div>
       </main>

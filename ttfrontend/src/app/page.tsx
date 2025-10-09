@@ -169,7 +169,7 @@ export default function Home() {
             <span>with 💚 Cryptic Finds gng </span>
           </div>
           {/* cryptic{h1dd3n_am0ng_n01s3} */}
-          <div className="mt-3 text-xs text-gray-600">
+          <div className="mt-3 text-xs cryptic{h1dd3n_am0ng_n01s3}  text-gray-600">
             © {new Date().getFullYear()} Cryptic Finds · Be kind, play fair.
           </div>
         </footer>

@@ -369,6 +369,8 @@ export default function MissionsPage() {
     // This is the new UI layout that arranges your components
     return (
         <div className="min-h-screen bg-[#0d0d0d]/60 text-white">
+        
+
             <div className="relative z-10 p-4 sm:p-8 lg:p-12">
                 <header className="flex items-center gap-6 pb-8 border-b-2 border-[#522546] mb-8">
                     <h1 className="font-vt323 text-4xl text-white tracking-widest">
@@ -421,3 +423,5 @@ export default function MissionsPage() {
         </div>
     );
 }
+
+    
