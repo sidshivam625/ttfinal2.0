@@ -1305,29 +1305,74 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
 // Leaderboards
 //
 export const leaderboard = functions.region("asia-south1").https.onCall(async () => {
-  const limit = 50;
+  // First, get all users with their scores
   const usersSnap = await db.collection('users')
     .orderBy('totalScore', 'desc')
-    .limit(limit)
+    .limit(1000) // Increase limit to ensure we don't miss any users with the same score
     .get();
 
-  const results: Array<{ rank: number; uid: string; username: string; totalScore: number; solvedCount: number; delegateId?: string }>= [];
-  let rank = 1;
-  usersSnap.forEach((doc) => {
+  // Process users to calculate tiebreaker timestamp (last score-increasing solve time)
+  const usersWithTiebreaker = await Promise.all(usersSnap.docs.map(async (doc) => {
     const d = doc.data() as any;
     const username = d.username || d.name || 'Anonymous';
     const totalScore = Number(d.totalScore ?? 0);
     const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
     const solvedCount = solvedLogs.filter((e) => Number(e?.actualScore || 0) > 0).length;
-    results.push({ rank: rank++, uid: doc.id, username, totalScore, solvedCount, delegateId: d.delegateId });
+    
+    // Find the timestamp of the last score-increasing solve
+    let lastScoreTime = 0;
+    if (solvedLogs.length > 0) {
+      const scoreIncreasingSolves = solvedLogs
+        .filter(e => Number(e?.actualScore || 0) > 0 && e?.solvedAt)
+        .map(e => ({
+          time: new Date(e.solvedAt).getTime(),
+          score: Number(e.actualScore || 0)
+        }))
+        .sort((a, b) => b.time - a.time); // Sort by most recent first
+      
+      if (scoreIncreasingSolves.length > 0) {
+        lastScoreTime = scoreIncreasingSolves[0].time;
+      } else {
+        // If no solved logs with scores, use account creation time as fallback
+        lastScoreTime = d.createdAt?.toMillis?.() || 0;
+      }
+    } else {
+      // If no solved logs at all, use account creation time as fallback
+      lastScoreTime = d.createdAt?.toMillis?.() || 0;
+    }
+
+    return {
+      uid: doc.id,
+      username,
+      totalScore,
+      solvedCount,
+      delegateId: d.delegateId,
+      lastScoreTime,
+      createdAt: d.createdAt?.toMillis?.() || 0
+    };
+  }));
+
+  // Sort by totalScore (descending) and then by lastScoreTime (ascending)
+  usersWithTiebreaker.sort((a, b) => {
+    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+    return a.lastScoreTime - b.lastScoreTime; // Earlier time comes first
   });
+
+  // Assign ranks (1-based)
+  const results = usersWithTiebreaker.map((user, index) => ({
+    rank: index + 1,
+    uid: user.uid,
+    username: user.username,
+    totalScore: user.totalScore,
+    solvedCount: user.solvedCount,
+    delegateId: user.delegateId
+  }));
 
   return { success: true, leaderboard: results };
 });
 
 export const getLeaderboardWithHistory = functions.region("asia-south1").https.onCall(async (data, context) => {
     const limit = 10; // We only need the top 10 for the chart
-
     // This query is efficient: it only fetches the top 10 users by score.
     const usersSnap = await db.collection('users')
         .orderBy('totalScore', 'desc')

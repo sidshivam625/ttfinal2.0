@@ -8,7 +8,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../lib/firebaseClient";
-import { BarChart2 } from "lucide-react";
+import { BarChart2, Download } from "lucide-react";
 import { Loader } from "@/utils/Loader";
 import CTFButton from "@/utils/CTFButton";
 import Link from "next/link";
@@ -90,6 +90,7 @@ export default function LeaderboardPage() {
   const [topTenHistory, setTopTenHistory] = useState<PlayerHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (!authLoading) {
@@ -173,6 +174,43 @@ export default function LeaderboardPage() {
     },
   } as const;
 
+  const exportToCSV = () => {
+    setIsExporting(true);
+    try {
+      // Create CSV header
+      const headers = ['Rank', 'Username', 'Missions Solved', 'Total Score'];
+      
+      // Create CSV rows
+      const rows = fullLeaderboard.map(player => [
+        player.rank,
+        `"${player.username.replace(/"/g, '""')}"`,
+        player.solvedCount,
+        player.totalScore
+      ]);
+      
+      // Combine header and rows
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.join(','))
+      ].join('\n');
+      
+      // Create download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `leaderboard_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Error exporting to CSV:', err);
+      setError('Failed to export leaderboard data.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black/40 text-white">
 
@@ -194,6 +232,17 @@ export default function LeaderboardPage() {
 
         {/* --- LEADERBOARD TABLE (for All Users) --- */}
         <div className="bg-[#2b0f1a]/50 p-6 rounded-xl border border-[#7a2f49] shadow-lg">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-vt323 text-2xl text-[#ef3b57]">// FULL LEADERBOARD</h3>
+            <button
+              onClick={exportToCSV}
+              disabled={isExporting}
+              className="flex items-center gap-2 px-4 py-2 bg-[#ef3b57] hover:bg-[#d12b47] text-white rounded-md transition-colors font-vt323 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download size={18} />
+              {isExporting ? 'Exporting...' : 'Export as CSV'}
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full font-vt323  text-left">
               <thead className="border-b-2 border-[#7a2f49]">
