@@ -6,6 +6,9 @@ import { VT323,Press_Start_2P } from 'next/font/google';
 import Background from '@/utils/Background';
 
 export const metadata: Metadata = {
+  icons: {
+        icon: '/icon.png', 
+      },
   title: 'Cryptic Finds 2025',
   description: 'Can you do it? A treasure hunt like no other.',
 };

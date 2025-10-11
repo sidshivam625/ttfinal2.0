@@ -8,7 +8,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { useRouter } from "next/navigation";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../lib/firebaseClient";
-import { BarChart2 } from "lucide-react";
+import { BarChart2, Download } from "lucide-react";
 import { Loader } from "@/utils/Loader";
 import CTFButton from "@/utils/CTFButton";
 import Link from "next/link";
@@ -90,6 +90,7 @@ export default function LeaderboardPage() {
   const [topTenHistory, setTopTenHistory] = useState<PlayerHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
 
   useEffect(() => {
     if (!authLoading) {
@@ -173,6 +174,8 @@ export default function LeaderboardPage() {
     },
   } as const;
 
+  
+
   return (
     <div className="min-h-screen bg-black/40 text-white">
 
@@ -194,6 +197,9 @@ export default function LeaderboardPage() {
 
         {/* --- LEADERBOARD TABLE (for All Users) --- */}
         <div className="bg-[#2b0f1a]/50 p-6 rounded-xl border border-[#7a2f49] shadow-lg">
+          <div className="flex items-center mb-4">
+            <h3 className="font-vt323 text-2xl text-[#ef3b57]">// FULL LEADERBOARD</h3>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full font-vt323  text-left">
               <thead className="border-b-2 border-[#7a2f49]">

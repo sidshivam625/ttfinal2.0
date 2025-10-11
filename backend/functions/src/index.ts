@@ -205,9 +205,9 @@ export const createAccount = functions.region('asia-south1').https.onCall(async 
       emailVerified: false,
     });
 
-    // Build a solved_logs scaffold with 25 entries so mission logic has a predictable shape
+    // Build a solved_logs scaffold with 29 entries so mission logic has a predictable shape
     const solved_logs: any[] = [];
-    for (let i = 1; i <= 25; i++) {
+    for (let i = 1; i <= 32; i++) {
       solved_logs.push({
         challengeId: `challenge${i}`,
         solvedAt: '',
@@ -291,23 +291,129 @@ export const getUserProfile = functions.region('asia-south1').https.onCall(async
   };
 });
 
-//
+export const toggleLeaderboardVisibility = functions.region('asia-south1').https.onCall(
+  async (data: { userId: string; hide: boolean }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    }
+    
+    const { userId, hide } = data;
+    
+    if (!userId) {
+      throw new functions.https.HttpsError('invalid-argument', 'User ID is required');
+    }
+
+    try {
+      // Verify admin status
+      const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+      const adminData = adminDoc.data();
+      
+      if (!adminData?.isAdmin) {
+        throw new functions.https.HttpsError('permission-denied', 'Admin privileges required');
+      }
+
+      await db.collection('users').doc(userId).update({
+        hiddenFromLeaderboard: hide,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return { 
+        success: true, 
+        userId, 
+        hidden: hide,
+        message: `User ${hide ? 'hidden from' : 'shown on'} leaderboard successfully`
+      };
+      
+    } catch (error: unknown) {
+      console.error('Error toggling leaderboard visibility:', error);
+      const errorMessage = (error && typeof error === 'object' && 'message' in error) 
+        ? String(error.message) 
+        : 'Failed to update leaderboard visibility';
+      throw new functions.https.HttpsError(
+        'internal', 
+        String(errorMessage)
+      );
+    }
+  }
+); 
+
+
+
+
 // 5) GET USER RANK (global rank)
 //
 export const getUserRank = functions.region('asia-south1').https.onCall(async (_data, context) => {
-  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  if (!context?.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+  
   const uid = context.auth.uid;
+  const userDoc = await db.collection('users').doc(uid).get();
+  
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'User not found');
+  }
 
-  const meDoc = await db.collection('users').doc(uid).get();
-  if (!meDoc.exists) throw new functions.https.HttpsError('not-found', 'Profile not found');
+  const userData = userDoc.data() || {};
+  
+  // Check if user is hidden from leaderboard
+  if (userData.hiddenFromLeaderboard) {
+    return { 
+      success: true, 
+      rank: null, 
+      isHidden: true,
+      message: 'User is hidden from leaderboard' 
+    };
+  }
 
-  const myScore = Number(meDoc.data()?.totalScore || 0);
+  const userScore = Number(userData.totalScore || 0);
+  
+  // Get count of non-hidden users with higher scores
+  // Get count of non-hidden users with higher scores
+// Build visible leaderboard snapshot and compute rank with the same tie-breaker
+const snap = await db.collection('users')
+  .orderBy('totalScore', 'desc')
+  .limit(2000)
+  .get();
 
-  // Rank = 1 + number of users with strictly higher score
-  const higherSnap = await db.collection('users').where('totalScore', '>', myScore).get();
-  const rank = higherSnap.size + 1;
+const players = await Promise.all(snap.docs.map(async (doc) => {
+  const d = doc.data() as any;
+  const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
+  let lastScoreTime = 0;
+  if (solvedLogs.length > 0) {
+    const scoreIncreasingSolves = solvedLogs
+      .filter(e => Number(e?.actualScore || 0) > 0 && e?.solvedAt)
+      .map(e => ({ time: new Date(e.solvedAt).getTime(), score: Number(e.actualScore || 0) }))
+      .sort((a, b) => b.time - a.time);
+    lastScoreTime = scoreIncreasingSolves.length > 0
+      ? scoreIncreasingSolves[0].time
+      : (d.createdAt?.toMillis?.() || 0);
+  } else {
+    lastScoreTime = d.createdAt?.toMillis?.() || 0;
+  }
+  return {
+    uid: doc.id,
+    totalScore: Number(d.totalScore ?? 0),
+    lastScoreTime,
+    hidden: d.hiddenFromLeaderboard === true,
+  };
+}));
 
-  return { success: true, rank };
+const visible = players.filter(p => !p.hidden);
+visible.sort((a, b) => {
+  if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+  return a.lastScoreTime - b.lastScoreTime;
+});
+
+const idx = visible.findIndex(p => p.uid === uid);
+const rank = idx >= 0 ? idx + 1 : null;
+
+return { 
+  success: true, 
+  rank,
+  isHidden: false,
+  totalScore: userScore
+};
 });
 
 //
@@ -644,6 +750,22 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
       let freeAttemptsLeft: number | null = null
       let currentPenalty: number = 0
 
+      // Check for cheating on incorrect submissions - if they submitted someone else's custom flag
+      let cheatedUserIds: string[] = [];
+      let currentUserCheated = false;
+      if (uid) {
+        cheatedUserIds = await checkForCheating(db, challengeId, submitted, uid);
+        if (cheatedUserIds.length > 0) {
+          console.log('[adminSubmitFlag] Cheating detected on incorrect submission:', { 
+            challengeId, 
+            submittedFlag: submitted, 
+            currentUser: uid, 
+            cheatedUsers: cheatedUserIds 
+          });
+          currentUserCheated = true;
+        }
+      }
+
       if (uid) {
         const userRef = db.collection('users').doc(uid)
         await db.runTransaction(async (tx) => {
@@ -683,6 +805,29 @@ export const adminSubmitFlag = functions.region('asia-south1').https.onRequest(a
 
           tx.set(userRef, { solved_logs: logs }, { merge: true })
         })
+        
+        // Mark current user as cheated if they submitted someone else's custom flag (outside transaction)
+        if (currentUserCheated) {
+          // Find and update the current user's custom flag record
+          const collections = [
+            `customFlagChallenge${String(challengeId).replace('challenge', '')}`,
+            `custom1challenge${String(challengeId).replace('challenge', '')}`,
+            `custom2challenge${String(challengeId).replace('challenge', '')}`
+          ];
+          
+          for (const collectionName of collections) {
+            const customFlagSnap = await db.collection(collectionName)
+              .where('userId', '==', uid)
+              .where('challengeId', '==', challengeId)
+              .limit(1)
+              .get();
+            
+            if (!customFlagSnap.empty) {
+              await customFlagSnap.docs[0].ref.update({ hasCheated: true });
+              break; // Found and updated, no need to check other collections
+            }
+          }
+        }
       }
 
       const incorrectMsg = freeAttemptsLeft == null
@@ -774,7 +919,7 @@ async function generateDistortedQRCode(flag: string): Promise<{ distortedQR: str
 
     // 4) Assemble final SVG with background black and quadrant groups
     const svgParts: string[] = [];
-    svgParts.push(`<svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`);
+    svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`);
     svgParts.push(`<rect width="100%" height="100%" fill="#000"/>`);
 
     // Swap positions of 1 and 4 and rotate both 180° around center
@@ -800,7 +945,7 @@ function generateCustomFlag(userId: string, challengeId: string): string {
   const hash = crypto.createHash('sha256').update(seed).digest('hex');
   // Take first 12 characters for a shorter flag
   const flagContent = hash.substring(0, 12);
-  return `ctf{${flagContent}}`;
+  return `cryptic{${flagContent}}`;
 }
 
 // Generate custom1 (cookie-based) flag for user-challenge combination
@@ -809,7 +954,7 @@ function generateCustom1Flag(userId: string, challengeId: string): string {
   const seed = `${userId}_${challengeId}_cookie_puzzle`;
   const hash = crypto.createHash('sha256').update(seed).digest('hex');
   const flagContent = hash.substring(0, 12);
-  return `ctf{${flagContent}}`;
+  return `cryptic{${flagContent}}`;
 } 
 
 // Generate custom2 (freezed leaderboard) flag for user-challenge combination
@@ -818,7 +963,7 @@ function generateCustom2Flag(userId: string, challengeId: string): string {
   const seed = `${userId}_${challengeId}_freeze_puzzle`;
   const hash = crypto.createHash('sha256').update(seed).digest('hex');
   const flagContent = hash.substring(0, 12);
-  return `ctf{${flagContent}}`;
+  return `cryptic{${flagContent}}`;
 }
 
 // Encrypt flag for storage
@@ -829,6 +974,43 @@ function encryptFlag(flag: string): string {
   let encrypted = cipher.update(flag, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   return encrypted;
+}
+
+// Check for cheating: see if submitted flag matches another user's flag for the same challenge
+async function checkForCheating(db: admin.firestore.Firestore, challengeId: string, submittedFlag: string, currentUserId: string): Promise<string[]> {
+  const cheatedUserIds: string[] = [];
+  
+  try {
+    // Check all custom flag collections for this challenge
+    const collections = [
+      `customFlagChallenge${String(challengeId).replace('challenge', '')}`,
+      `custom1challenge${String(challengeId).replace('challenge', '')}`,
+      `custom2challenge${String(challengeId).replace('challenge', '')}`
+    ];
+    
+    for (const collectionName of collections) {
+      const snap = await db.collection(collectionName)
+        .where('challengeId', '==', challengeId)
+        .get();
+      
+      for (const doc of snap.docs) {
+        const data = doc.data() as any;
+        const storedFlag = data?.flagData?.originalFlag;
+        const userId = data?.userId;
+        
+        // If flag matches another user's flag and it's not the current user
+        if (storedFlag === submittedFlag && userId !== currentUserId) {
+          cheatedUserIds.push(userId);
+          // Mark this user as cheated
+          await doc.ref.update({ hasCheated: true });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[checkForCheating] Error:', error);
+  }
+  
+  return cheatedUserIds;
 }
 
 // Create custom flags for a user
@@ -860,7 +1042,8 @@ async function createCustomFlagsForUser(userId: string, delegateId: string) {
           qrImages: qrData
         },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        isUsed: false
+        isUsed: false,
+        hasCheated: false
       };
       
       const collectionName = `customFlagChallenge${String(challengeId).replace('challenge', '')}`;
@@ -906,6 +1089,7 @@ async function createCustom1FlagsForUser(userId: string, delegateId: string) {
         },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         isUsed: false,
+        hasCheated: false,
       };
 
       // Collection naming for cookies, e.g. custom1challenge5
@@ -1015,6 +1199,7 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
       let r = 1;
       for (const doc of top10Snap.docs) {
         const d = doc.data() as any;
+        if (d.hiddenFromLeaderboard === true) { continue; }
         const username = d.username || d.name || 'Anonymous';
         const totalScore = Number(d.totalScore ?? 0);
         const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
@@ -1037,6 +1222,7 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
         });
 
         topTenHistory.push({ rank: r++, uid: doc.id, username, totalScore, pointsOverTime });
+        if (topTenHistory.length >= 10) break;
       }
     }
 
@@ -1083,6 +1269,7 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
       },
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       isUsed: false,
+      hasCheated: false,
     };
 
     await db.collection(collectionName).add(record);
@@ -1127,6 +1314,7 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
         let r = 1;
         fullSnap.forEach((doc) => {
           const d = doc.data() as any;
+          if (d.hiddenFromLeaderboard === true) { return; }
           const username = d.username || d.name || 'Anonymous';
           const totalScore = Number(d.totalScore ?? 0);
           const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
@@ -1137,13 +1325,14 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
 
       const top10Snap = await db.collection('users')
         .orderBy('totalScore', 'desc')
-        .limit(10)
+        .limit(25)
         .get();
       const topTenHistory: Array<{ rank: number; uid: string; username: string; totalScore: number; pointsOverTime: { time: number; score: number }[] }> = [];
       {
         let r = 1;
         for (const doc of top10Snap.docs) {
           const d = doc.data() as any;
+          if (d.hiddenFromLeaderboard === true) { continue; }
           const username = d.username || d.name || 'Anonymous';
           const totalScore = Number(d.totalScore ?? 0);
           const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
@@ -1164,6 +1353,7 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
             }
           });
           topTenHistory.push({ rank: r++, uid: doc.id, username, totalScore, pointsOverTime });
+          if (topTenHistory.length >= 10) break;
         }
       }
       const toBit = (name: string) => {
@@ -1200,6 +1390,7 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
         },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         isUsed: false,
+        hasCheated: false,
       };
       await db.collection(collectionName).add(record);
       snap = await db.collection(collectionName)
@@ -1220,39 +1411,86 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
     throw new functions.https.HttpsError('internal', 'Failed to validate sequence');
   }
 });
-
 //
 // Leaderboards
 //
 export const leaderboard = functions.region("asia-south1").https.onCall(async () => {
-  const limit = 50;
+  // Fetch ordered by score; filter hidden in code to avoid composite indexes
   const usersSnap = await db.collection('users')
     .orderBy('totalScore', 'desc')
-    .limit(limit)
+    .limit(2000)
     .get();
 
-  const results: Array<{ rank: number; uid: string; username: string; totalScore: number; solvedCount: number; delegateId?: string }>= [];
-  let rank = 1;
-  usersSnap.forEach((doc) => {
+  // Process users to calculate tiebreaker timestamp (last score-increasing solve time)
+  const usersWithTiebreaker = await Promise.all(
+    usersSnap.docs
+      .filter(doc => ((doc.data() as any)?.hiddenFromLeaderboard !== true))
+      .map(async (doc) => {
     const d = doc.data() as any;
     const username = d.username || d.name || 'Anonymous';
     const totalScore = Number(d.totalScore ?? 0);
     const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
     const solvedCount = solvedLogs.filter((e) => Number(e?.actualScore || 0) > 0).length;
-    results.push({ rank: rank++, uid: doc.id, username, totalScore, solvedCount, delegateId: d.delegateId });
+    
+    // Find the timestamp of the last score-increasing solve
+    let lastScoreTime = 0;
+    if (solvedLogs.length > 0) {
+      const scoreIncreasingSolves = solvedLogs
+        .filter(e => Number(e?.actualScore || 0) > 0 && e?.solvedAt)
+        .map(e => ({
+          time: new Date(e.solvedAt).getTime(),
+          score: Number(e.actualScore || 0)
+        }))
+        .sort((a, b) => b.time - a.time); // Sort by most recent first
+      
+      if (scoreIncreasingSolves.length > 0) {
+        lastScoreTime = scoreIncreasingSolves[0].time;
+      } else {
+        // If no solved logs with scores, use account creation time as fallback
+        lastScoreTime = d.createdAt?.toMillis?.() || 0;
+      }
+    } else {
+      // If no solved logs at all, use account creation time as fallback
+      lastScoreTime = d.createdAt?.toMillis?.() || 0;
+    }
+
+    return {
+      uid: doc.id,
+      username,
+      totalScore,
+      solvedCount,
+      delegateId: d.delegateId,
+      lastScoreTime,
+      createdAt: d.createdAt?.toMillis?.() || 0
+    };
+  }));
+
+  // Sort by totalScore (descending) and then by lastScoreTime (ascending)
+  usersWithTiebreaker.sort((a, b) => {
+    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+    return a.lastScoreTime - b.lastScoreTime; // Earlier time comes first
   });
+
+  // Assign ranks (1-based)
+  const results = usersWithTiebreaker.map((user, index) => ({
+    rank: index + 1,
+    uid: user.uid,
+    username: user.username,
+    totalScore: user.totalScore,
+    solvedCount: user.solvedCount,
+    delegateId: user.delegateId
+  }));
 
   return { success: true, leaderboard: results };
 });
 
 export const getLeaderboardWithHistory = functions.region("asia-south1").https.onCall(async (data, context) => {
     const limit = 10; // We only need the top 10 for the chart
-
-    // This query is efficient: it only fetches the top 10 users by score.
+    // This query is efficient: it only fetches the top 10 non-hidden users by score.
     const usersSnap = await db.collection('users')
-        .orderBy('totalScore', 'desc')
-        .limit(limit)
-        .get();
+    .orderBy('totalScore', 'desc')
+    .limit(50)
+    .get();
 
     const results: Array<{
         rank: number;
@@ -1266,6 +1504,9 @@ export const getLeaderboardWithHistory = functions.region("asia-south1").https.o
     let rank = 1;
     for (const doc of usersSnap.docs) {
         const d = doc.data() as any;
+        if (d.hiddenFromLeaderboard === true) {
+          continue;
+      }
         const username = d.username || d.name || 'Anonymous';
         const totalScore = Number(d.totalScore ?? 0);
         const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
@@ -1304,7 +1545,8 @@ export const getLeaderboardWithHistory = functions.region("asia-south1").https.o
             username,
             totalScore,
             pointsOverTime,
-        });
+        }); 
+        if (results.length >= limit) break;
     }
 
     return { success: true, leaderboard: results };

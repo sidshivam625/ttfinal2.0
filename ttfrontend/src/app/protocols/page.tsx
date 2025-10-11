@@ -18,7 +18,7 @@ const ProtocolCard = () => {
                         I. Point Acquisition Matrix
                     </h3>
                     <p className="text-[#d1d5db] leading-relaxed text-lg">
-                        Points are allocated upon ingestion of a valid flag string. The value is static, calculated by target system difficulty:
+                        Points are allocated upon ingestion of a valid flag string. The value is static, calculated by target systems. There are various types of systems:
                     </p>
                     <ul className="list-none mt-4 flex flex-col gap-3">
                         <li className="bg-[rgba(220,38,38,0.5)] border border-[#f73750] text-[#d1d5db] p-3 rounded-md flex items-center justify-between text-lg">
@@ -27,16 +27,17 @@ const ProtocolCard = () => {
                         </li>
                         <li className="bg-[rgba(220,38,38,0.5)] border border-[#f73750] text-[#d1d5db] p-3 rounded-md flex items-center justify-between text-lg">
                            <span className="text-[#f97316] font-bold">Medium Systems:</span>
-                           <span><span className="opacity-70 mx-1">▲</span>300<span className="opacity-70 mx-1">▲</span> PTS</span>
+                           <span><span className="opacity-70 mx-1">▲</span>200<span className="opacity-70 mx-1">▲</span> PTS</span>
                         </li>
                         <li className="bg-[rgba(220,38,38,0.5)] border border-[#f73750] text-[#d1d5db] p-3 rounded-md flex items-center justify-between text-lg">
                            <span className="text-[#f97316] font-bold">Hard Systems:</span>
-                           <span><span className="opacity-70 mx-1">▲</span>500<span className="opacity-70 mx-1">▲</span> PTS</span>
+                           <span><span className="opacity-70 mx-1">▲</span>300<span className="opacity-70 mx-1">▲</span> PTS</span>
                         </li>
                         <li className="bg-[rgba(220,38,38,0.5)] border border-[#f73750] text-[#d1d5db] p-3 rounded-md flex items-center justify-between text-lg">
-                            <span className="text-[#f97316] font-bold">Critical Systems:</span>
-                            <span><span className="opacity-70 mx-1">▲</span>1000<span className="opacity-70 mx-1">▲</span> PTS</span>
+                           <span className="text-[#f97316] font-bold">Critical Systems:</span>
+                           <span><span className="opacity-70 mx-1">▲</span>500<span className="opacity-70 mx-1">▲</span> PTS</span>
                         </li>
+                       
                     </ul>
                 </div>
 
@@ -47,10 +48,7 @@ const ProtocolCard = () => {
                     <p className="text-[#d1d5db] leading-relaxed text-lg">
                         System integrity is paramount. Invalid flag sequences submitted against high-value targets will trigger defensive subroutines. This protocol is dormant for 'Easy' systems.
                     </p>
-                    <ul className="list-none pl-4 mt-2 space-y-2 text-[#d1d5db] text-lg">
-                        <li className="before:content-['>>'] before:text-[#f97316] before:pr-3">After <span className="text-[#f97316] font-bold">3 invalid submissions</span>, the final point allocation for that target is permanently <span className="text-[#f97316] font-bold">degraded by 10%</span>.</li>
-                        <li className="before:content-['>>'] before:text-[#f97316] before:pr-3">This degradation is a <span className="text-[#f97316] font-bold">one-time event</span> per target. Further invalid submissions will be logged but will not decrease the value further.</li>
-                    </ul>
+                   
                 </div>
 
                 <div>
@@ -62,7 +60,9 @@ const ProtocolCard = () => {
                     <h3 className="text-[#f97316] mt-6 mb-2 border-b border-[#f97316] pb-1 tracking-wider text-2xl">IV. Flag Ingestion & Validation</h3>
                     <p className="text-[#d1d5db] leading-relaxed text-lg">All flags are ASCII strings and must conform to the standard validation format. The validation parser is <span className="text-[#f97316] font-bold">case-insensitive</span>.</p>
                      <ul className="list-none pl-4 mt-2 space-y-2 text-[#d1d5db] text-lg">
-                        <li className="before:content-['>>'] before:text-[#f97316] before:pr-3">Standard Format: <span className="font-bold text-[#06b6d4] bg-[#111827] px-2 py-0.5 rounded-md">ctf&#123;alpha_numeric_string_with_underscores&#125;</span></li>
+                        <li className="before:content-['>>'] before:text-[#f97316] before:pr-3">Standard Format: <span className="font-bold text-[#06b6d4] bg-[#111827] px-2 py-0.5 rounded-md">cryptic&#123;alpha_numeric_string_with_underscores&#125;</span></li>
+                        <li className="before:content-['>>'] text-2xl font-extrabold text-red-500  before:text-[#f97316] before:pr-3">However, while using your operator terminal to submit, you are required to do it in the format : flag cryptic{"{"}flag_here{"}"}</li>
+                        
                      </ul>
                 </div>
 
@@ -83,6 +83,8 @@ const ProtocolCard = () => {
                         <li className="before:content-['>>'] before:text-[#f73750] before:pr-3"><span className="text-[#f73750] font-bold">DO NOT</span> engage in network warfare, DoS, or any activity that impedes other operators.</li>
                         <li className="before:content-['>>'] before:text-[#f73750] before:pr-3"><span className="text-[#f73750] font-bold">DO NOT</span> exfiltrate or share flags or exploit methodologies between cells.</li>
                         <li className="before:content-['>>'] before:text-[#f73750] before:pr-3">All operations must be confined to the designated <span className="text-[#f97316] font-bold">challenge IP ranges and scopes</span>. Any deviation is considered a hostile act.</li>
+                        <li className="before:content-['>>'] before:text-[#f73750] before:pr-3">Also, thank you everyone for attending. Making this whole event for fun for all of us, hope the website doesn't disappoint.<span className="text-[#f97316] font-bold">Thank you all, please don't break the site -_- </span> </li>
+                        
                     </ul>
                 </div>
             </div>

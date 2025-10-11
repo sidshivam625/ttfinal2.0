@@ -11,24 +11,31 @@ import { useEffect, useState } from "react";
 import CTFButton from "@/utils/CTFButton";
 import Link from "next/link";
 import { Loader } from "@/utils/Loader";
+import { useAuth } from "../../../context/AuthContext";
+import { useRouter } from "next/navigation";
 
 
 // Your original, unchanged logic is here
 export default function MissionsPage() {
+    const { user, loading: authLoading } = useAuth();
+    const router = useRouter();
     const [challenges, setChallenges] = useState<any[]>([]);
     const [currentIdx, setCurrentIdx] = useState(0);
     const [statuses, setStatuses] = useState<{[key: number]: "active"|"done"|"locked"}>({});
     const [loading, setLoading] = useState(true);
-    const [uid, setUid] = useState<string | null>(null);
     const [hasStarted, setHasStarted] = useState<boolean | null>(null);
     const [hasEnded, setHasEnded] = useState<boolean | null>(null);
 
+    // Check authentication and email verification
     useEffect(() => {
-        const unsub = auth.onAuthStateChanged(async (user) => {
-            setUid(user ? user.uid : null);
-        });
-        return () => unsub();
-    }, []);
+        if (!authLoading) {
+            if (!user) {
+                router.push('/enlist');
+            } else if (!user.emailVerified) {
+                router.push('/profile');
+            }
+        }
+    }, [user, authLoading, router]);
 
     // Event gate: listen to event/status in Firestore
     useEffect(() => {
@@ -62,7 +69,7 @@ export default function MissionsPage() {
 
     useEffect(() => {
         async function fetchProgress() {
-            if (!uid || challenges.length === 0) return;
+            if (!user || challenges.length === 0) return;
             try {
                 const token = await auth.currentUser?.getIdToken();
                 const base = (process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL || '').replace(/\/+$/, '');
@@ -157,7 +164,7 @@ export default function MissionsPage() {
             } catch (e) { console.error('Error fetching progress:', e); }
         }
         fetchProgress();
-    }, [uid, challenges]);
+    }, [user, challenges]);
 
     // Initialize freeze when entering an isCustom2 challenge (runs every render, safe with early returns below)
     useEffect(() => {
@@ -213,7 +220,7 @@ export default function MissionsPage() {
 
     async function validateFlag(flag: string): Promise<{ success: boolean; message: string }> {
         if (!challenges.length) return { success: false, message: "No challenge loaded." };
-        if (!uid) return { success: false, message: "User not authenticated." };
+        if (!user) return { success: false, message: "User not authenticated." };
         const challenge = challenges[currentIdx];
         try {
             const token = await auth.currentUser?.getIdToken();
@@ -222,7 +229,7 @@ export default function MissionsPage() {
             const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: uid, challengeId: challenge.challengeId || challenge.id, flag, token })
+                body: JSON.stringify({ userId: user.uid, challengeId: challenge.challengeId || challenge.id, flag, token })
             });
             const data = await res.json();
             if (data.success) {
@@ -324,7 +331,7 @@ export default function MissionsPage() {
         </main>
     );
 
-    if (loading) return (
+    if (authLoading || loading) return (
         <main className="min-h-screen text-[#ef3b57] font-press-start-2p p-6 flex items-center justify-center">
             <div className="flex flex-col items-center gap-4">
                 <Loader/>
@@ -333,12 +340,23 @@ export default function MissionsPage() {
         </main>
     );
     
-    if (!uid) {
+    if (!user) {
         return (
             <main className="min-h-screen font-press-start-2p text-[#ef3b57] p-6 flex items-center justify-center text-center">
                 <div>
                     <p className="mb-4 text-lg">Please sign in to access missions.</p>
                     <Link  href="/enlist"><CTFButton text="Go to Enlist"/></Link>
+                </div>
+            </main>
+        );
+    }
+
+    if (!user.emailVerified) {
+        return (
+            <main className="min-h-screen font-press-start-2p text-[#ef3b57] p-6 flex items-center justify-center text-center">
+                <div>
+                    <p className="mb-4 text-lg">Please verify your email to access missions.</p>
+                    <Link href="/profile"><CTFButton text="Go to Profile"/></Link>
                 </div>
             </main>
         );
@@ -406,3 +424,4 @@ export default function MissionsPage() {
     );
 }
 
+    

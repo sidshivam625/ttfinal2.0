@@ -113,6 +113,7 @@ export default function Navbar() {
           const href = freezeActive ? "/ranking" : "/rankings";
           return <Link href={href} className={getNavClasses(href)}>RANKINGS</Link>;
         })()}
+        <Link href="/ogrankings" className={getNavClasses("/ogrankings")}>OG RANKINGS</Link>
         <Link href="/missions" className={getNavClasses("/missions")}>MISSIONS</Link>
         <Link href="/protocols" className={getNavClasses("/protocols")}>PROTOCOLS</Link>
 
