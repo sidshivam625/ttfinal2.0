@@ -1199,6 +1199,7 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
       let r = 1;
       for (const doc of top10Snap.docs) {
         const d = doc.data() as any;
+        if (d.hiddenFromLeaderboard === true) { continue; }
         const username = d.username || d.name || 'Anonymous';
         const totalScore = Number(d.totalScore ?? 0);
         const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
@@ -1221,6 +1222,7 @@ export const getUserCustom2Freeze = functions.region('asia-south1').https.onCall
         });
 
         topTenHistory.push({ rank: r++, uid: doc.id, username, totalScore, pointsOverTime });
+        if (topTenHistory.length >= 10) break;
       }
     }
 
@@ -1312,6 +1314,7 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
         let r = 1;
         fullSnap.forEach((doc) => {
           const d = doc.data() as any;
+          if (d.hiddenFromLeaderboard === true) { return; }
           const username = d.username || d.name || 'Anonymous';
           const totalScore = Number(d.totalScore ?? 0);
           const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
@@ -1322,13 +1325,14 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
 
       const top10Snap = await db.collection('users')
         .orderBy('totalScore', 'desc')
-        .limit(10)
+        .limit(25)
         .get();
       const topTenHistory: Array<{ rank: number; uid: string; username: string; totalScore: number; pointsOverTime: { time: number; score: number }[] }> = [];
       {
         let r = 1;
         for (const doc of top10Snap.docs) {
           const d = doc.data() as any;
+          if (d.hiddenFromLeaderboard === true) { continue; }
           const username = d.username || d.name || 'Anonymous';
           const totalScore = Number(d.totalScore ?? 0);
           const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
@@ -1349,6 +1353,7 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
             }
           });
           topTenHistory.push({ rank: r++, uid: doc.id, username, totalScore, pointsOverTime });
+          if (topTenHistory.length >= 10) break;
         }
       }
       const toBit = (name: string) => {
