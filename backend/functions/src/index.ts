@@ -291,23 +291,129 @@ export const getUserProfile = functions.region('asia-south1').https.onCall(async
   };
 });
 
-//
+export const toggleLeaderboardVisibility = functions.region('asia-south1').https.onCall(
+  async (data: { userId: string; hide: boolean }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    }
+    
+    const { userId, hide } = data;
+    
+    if (!userId) {
+      throw new functions.https.HttpsError('invalid-argument', 'User ID is required');
+    }
+
+    try {
+      // Verify admin status
+      const adminDoc = await db.collection('users').doc(context.auth.uid).get();
+      const adminData = adminDoc.data();
+      
+      if (!adminData?.isAdmin) {
+        throw new functions.https.HttpsError('permission-denied', 'Admin privileges required');
+      }
+
+      await db.collection('users').doc(userId).update({
+        hiddenFromLeaderboard: hide,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return { 
+        success: true, 
+        userId, 
+        hidden: hide,
+        message: `User ${hide ? 'hidden from' : 'shown on'} leaderboard successfully`
+      };
+      
+    } catch (error: unknown) {
+      console.error('Error toggling leaderboard visibility:', error);
+      const errorMessage = (error && typeof error === 'object' && 'message' in error) 
+        ? String(error.message) 
+        : 'Failed to update leaderboard visibility';
+      throw new functions.https.HttpsError(
+        'internal', 
+        String(errorMessage)
+      );
+    }
+  }
+); 
+
+
+
+
 // 5) GET USER RANK (global rank)
 //
 export const getUserRank = functions.region('asia-south1').https.onCall(async (_data, context) => {
-  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  if (!context?.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+  
   const uid = context.auth.uid;
+  const userDoc = await db.collection('users').doc(uid).get();
+  
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'User not found');
+  }
 
-  const meDoc = await db.collection('users').doc(uid).get();
-  if (!meDoc.exists) throw new functions.https.HttpsError('not-found', 'Profile not found');
+  const userData = userDoc.data() || {};
+  
+  // Check if user is hidden from leaderboard
+  if (userData.hiddenFromLeaderboard) {
+    return { 
+      success: true, 
+      rank: null, 
+      isHidden: true,
+      message: 'User is hidden from leaderboard' 
+    };
+  }
 
-  const myScore = Number(meDoc.data()?.totalScore || 0);
+  const userScore = Number(userData.totalScore || 0);
+  
+  // Get count of non-hidden users with higher scores
+  // Get count of non-hidden users with higher scores
+// Build visible leaderboard snapshot and compute rank with the same tie-breaker
+const snap = await db.collection('users')
+  .orderBy('totalScore', 'desc')
+  .limit(2000)
+  .get();
 
-  // Rank = 1 + number of users with strictly higher score
-  const higherSnap = await db.collection('users').where('totalScore', '>', myScore).get();
-  const rank = higherSnap.size + 1;
+const players = await Promise.all(snap.docs.map(async (doc) => {
+  const d = doc.data() as any;
+  const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
+  let lastScoreTime = 0;
+  if (solvedLogs.length > 0) {
+    const scoreIncreasingSolves = solvedLogs
+      .filter(e => Number(e?.actualScore || 0) > 0 && e?.solvedAt)
+      .map(e => ({ time: new Date(e.solvedAt).getTime(), score: Number(e.actualScore || 0) }))
+      .sort((a, b) => b.time - a.time);
+    lastScoreTime = scoreIncreasingSolves.length > 0
+      ? scoreIncreasingSolves[0].time
+      : (d.createdAt?.toMillis?.() || 0);
+  } else {
+    lastScoreTime = d.createdAt?.toMillis?.() || 0;
+  }
+  return {
+    uid: doc.id,
+    totalScore: Number(d.totalScore ?? 0),
+    lastScoreTime,
+    hidden: d.hiddenFromLeaderboard === true,
+  };
+}));
 
-  return { success: true, rank };
+const visible = players.filter(p => !p.hidden);
+visible.sort((a, b) => {
+  if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+  return a.lastScoreTime - b.lastScoreTime;
+});
+
+const idx = visible.findIndex(p => p.uid === uid);
+const rank = idx >= 0 ? idx + 1 : null;
+
+return { 
+  success: true, 
+  rank,
+  isHidden: false,
+  totalScore: userScore
+};
 });
 
 //
@@ -813,7 +919,7 @@ async function generateDistortedQRCode(flag: string): Promise<{ distortedQR: str
 
     // 4) Assemble final SVG with background black and quadrant groups
     const svgParts: string[] = [];
-    svgParts.push(`<svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`);
+    svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`);
     svgParts.push(`<rect width="100%" height="100%" fill="#000"/>`);
 
     // Swap positions of 1 and 4 and rotate both 180° around center
@@ -1300,19 +1406,21 @@ export const getCustom2FlagFromSequence = functions.region('asia-south1').https.
     throw new functions.https.HttpsError('internal', 'Failed to validate sequence');
   }
 });
-
 //
 // Leaderboards
 //
 export const leaderboard = functions.region("asia-south1").https.onCall(async () => {
-  // First, get all users with their scores
+  // Fetch ordered by score; filter hidden in code to avoid composite indexes
   const usersSnap = await db.collection('users')
     .orderBy('totalScore', 'desc')
-    .limit(1000) // Increase limit to ensure we don't miss any users with the same score
+    .limit(2000)
     .get();
 
   // Process users to calculate tiebreaker timestamp (last score-increasing solve time)
-  const usersWithTiebreaker = await Promise.all(usersSnap.docs.map(async (doc) => {
+  const usersWithTiebreaker = await Promise.all(
+    usersSnap.docs
+      .filter(doc => ((doc.data() as any)?.hiddenFromLeaderboard !== true))
+      .map(async (doc) => {
     const d = doc.data() as any;
     const username = d.username || d.name || 'Anonymous';
     const totalScore = Number(d.totalScore ?? 0);
@@ -1373,11 +1481,11 @@ export const leaderboard = functions.region("asia-south1").https.onCall(async ()
 
 export const getLeaderboardWithHistory = functions.region("asia-south1").https.onCall(async (data, context) => {
     const limit = 10; // We only need the top 10 for the chart
-    // This query is efficient: it only fetches the top 10 users by score.
+    // This query is efficient: it only fetches the top 10 non-hidden users by score.
     const usersSnap = await db.collection('users')
-        .orderBy('totalScore', 'desc')
-        .limit(limit)
-        .get();
+    .orderBy('totalScore', 'desc')
+    .limit(50)
+    .get();
 
     const results: Array<{
         rank: number;
@@ -1391,6 +1499,9 @@ export const getLeaderboardWithHistory = functions.region("asia-south1").https.o
     let rank = 1;
     for (const doc of usersSnap.docs) {
         const d = doc.data() as any;
+        if (d.hiddenFromLeaderboard === true) {
+          continue;
+      }
         const username = d.username || d.name || 'Anonymous';
         const totalScore = Number(d.totalScore ?? 0);
         const solvedLogs: any[] = Array.isArray(d?.solved_logs) ? d.solved_logs : [];
@@ -1429,7 +1540,8 @@ export const getLeaderboardWithHistory = functions.region("asia-south1").https.o
             username,
             totalScore,
             pointsOverTime,
-        });
+        }); 
+        if (results.length >= limit) break;
     }
 
     return { success: true, leaderboard: results };
